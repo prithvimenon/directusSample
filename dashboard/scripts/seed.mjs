@@ -187,7 +187,7 @@ async function fetchExistingGithubIds(token) {
     }
 
     for (const item of data) {
-      ids.add(item.github_id);
+      ids.add(Number(item.github_id));
     }
 
     if (data.length < PER_PAGE) {
