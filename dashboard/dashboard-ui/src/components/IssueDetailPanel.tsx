@@ -82,7 +82,7 @@ const lifecycleStages = [
 ] as const;
 
 function getLifecycleStageIndex(issueStatus: string, latestRunStatus?: string): number {
-  if (issueStatus === 'merged' || latestRunStatus === 'merged') return 5;
+  if (issueStatus === 'merged' || latestRunStatus === 'merged') return 6;
   if (issueStatus === 'pr_opened' || latestRunStatus === 'pr_opened') return 4;
   if (issueStatus === 'in_progress' || latestRunStatus === 'running') return 3;
   if (issueStatus === 'approved') return 2;
