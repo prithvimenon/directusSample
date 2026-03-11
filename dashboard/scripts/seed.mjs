@@ -13,8 +13,7 @@ const ADMIN_PASSWORD = process.env.DIRECTUS_ADMIN_PASSWORD || 'admin123';
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
 if (!GITHUB_TOKEN) {
-  console.error('GITHUB_TOKEN env var is required');
-  process.exit(1);
+  console.warn('GITHUB_TOKEN not set — using unauthenticated GitHub API (60 req/hr limit)');
 }
 
 const GITHUB_REPO = 'directus/directus';
@@ -49,13 +48,16 @@ async function fetchAllIssues() {
   while (true) {
     const url = `https://api.github.com/repos/${GITHUB_REPO}/issues?state=open&per_page=${PER_PAGE}&page=${page}`;
 
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${GITHUB_TOKEN}`,
-        Accept: 'application/vnd.github+json',
-        'User-Agent': 'issue-autopilot-dashboard',
-      },
-    });
+    const headers = {
+      Accept: 'application/vnd.github+json',
+      'User-Agent': 'issue-autopilot-dashboard',
+    };
+
+    if (GITHUB_TOKEN) {
+      headers.Authorization = `Bearer ${GITHUB_TOKEN}`;
+    }
+
+    const res = await fetch(url, { headers });
 
     if (!res.ok) {
       const text = await res.text();
