@@ -29,6 +29,8 @@ services:
       DB_USER: 'directus'
       DB_PASSWORD: 'directus'
       WEBSOCKETS_ENABLED: 'true'
+      CORS_ENABLED: 'true'
+      CORS_ORIGIN: 'true'
     volumes:
       - directus_uploads:/directus/uploads
       - directus_extensions:/directus/extensions
