@@ -1,5 +1,5 @@
 import { Bot, RefreshCw } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityLog } from './components/ActivityLog';
 import { IssueDetailPanel } from './components/IssueDetailPanel';
 import { IssuesTable } from './components/IssuesTable';
@@ -13,9 +13,14 @@ function App() {
   const { issues, loading: issuesLoading, refresh: refreshIssues } = useIssues();
   const { runs, loading: runsLoading, refresh: refreshRuns } = useDevinRuns();
   const { entries, loading: activityLoading, refresh: refreshActivity } = useActivityLog();
-  const { createSession, loading: handingOff, error: handOffError } = useDevinApi();
+  const { createSession, clearError, loading: handingOff, error: handOffError } = useDevinApi();
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Clear hand-off error when switching issues so stale errors don't leak
+  useEffect(() => {
+    clearError();
+  }, [selectedIssue, clearError]);
 
   const handleRefresh = async () => {
     setRefreshing(true);

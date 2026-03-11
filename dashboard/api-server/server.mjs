@@ -172,7 +172,7 @@ app.get('/api/devin/sessions/:sessionId', async (req, res) => {
   try {
     const { sessionId } = req.params;
 
-    const devinResponse = await fetch(`${DEVIN_API_URL}/session/${sessionId}`, {
+    const devinResponse = await fetch(`${DEVIN_API_URL}/sessions/${sessionId}`, {
       headers: {
         'Authorization': `Bearer ${DEVIN_API_KEY}`,
       },

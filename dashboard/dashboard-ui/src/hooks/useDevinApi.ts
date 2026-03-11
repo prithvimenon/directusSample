@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { Issue } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -51,8 +51,11 @@ export function useDevinApi() {
     }
   };
 
+  const clearError = useCallback(() => setState((s) => ({ ...s, error: null })), []);
+
   return {
     createSession,
+    clearError,
     loading: state.loading,
     error: state.error,
   };
