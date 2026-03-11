@@ -266,8 +266,8 @@ export function IssuesTable({ issues, loading, onSelectIssue, selectedIssueId }:
                     #{issue.github_id.toString().slice(-5)}
                   </span>
                 </td>
-                <td className="py-3 px-2 max-w-xs">
-                  <p className="truncate text-sm font-medium text-slate-900">
+                <td className="py-3 px-2">
+                  <p className="text-sm font-medium text-slate-900 leading-snug">
                     {issue.title}
                   </p>
                 </td>
