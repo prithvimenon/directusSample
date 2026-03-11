@@ -176,18 +176,18 @@ async function bootstrapIssues(token) {
     {
       field: 'status',
       type: 'string',
-      schema: { default_value: 'queued' },
+      schema: { default_value: 'unreviewed' },
       meta: {
         interface: 'select-dropdown',
         options: {
           choices: [
-            { text: 'Queued', value: 'queued' },
+            { text: 'Unreviewed', value: 'unreviewed' },
+            { text: 'Candidate', value: 'candidate' },
             { text: 'Approved', value: 'approved' },
             { text: 'In Progress', value: 'in_progress' },
-            { text: 'PR Open', value: 'pr_open' },
+            { text: 'PR Opened', value: 'pr_opened' },
             { text: 'Merged', value: 'merged' },
             { text: 'Escalated', value: 'escalated' },
-            { text: 'Skipped', value: 'skipped' },
           ],
         },
       },

@@ -167,7 +167,7 @@ function mapIssueToRecord(issue) {
     created_at: issue.created_at,
     updated_at: issue.updated_at,
     ...heuristics,
-    status: 'queued',
+    status: 'unreviewed',
   };
 }
 
@@ -382,7 +382,7 @@ async function seedDevinRuns(token) {
     merged: 'merged',
     running: 'in_progress',
     queued: 'approved',
-    pr_opened: 'pr_open',
+    pr_opened: 'pr_opened',
     failed: 'escalated',
     escalated: 'escalated',
   };
@@ -643,7 +643,7 @@ async function seedActivityLog(token) {
 
   // Add ~15 generic issue_ingested entries for random queued issues
   const queuedRes = await fetch(
-    `${DIRECTUS_URL}/items/issues?filter[status][_eq]=queued&limit=15`,
+    `${DIRECTUS_URL}/items/issues?filter[status][_eq]=unreviewed&limit=15`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
 
