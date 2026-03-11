@@ -130,7 +130,7 @@ async function bootstrapIssues(token) {
   });
 
   const fields = [
-    { field: 'github_id', type: 'integer', schema: { is_nullable: false }, meta: { required: true } },
+    { field: 'github_id', type: 'integer', schema: { is_nullable: false, is_unique: true }, meta: { required: true } },
     { field: 'repo', type: 'string', schema: {}, meta: {} },
     { field: 'title', type: 'string', schema: {}, meta: {} },
     { field: 'body', type: 'text', schema: {}, meta: {} },

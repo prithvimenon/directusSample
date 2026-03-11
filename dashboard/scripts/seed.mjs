@@ -150,7 +150,7 @@ function mapIssueToRecord(issue) {
   const heuristics = computeHeuristics(issue);
 
   return {
-    github_id: issue.number,
+    github_id: issue.id,
     repo: GITHUB_REPO,
     title: issue.title,
     body: issue.body || '',
