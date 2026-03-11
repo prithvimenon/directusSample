@@ -23,6 +23,7 @@ function getConfidenceBarColor(confidence: number): string {
 }
 
 const complexityColors: Record<string, string> = {
+  trivial: 'text-sky-600 bg-sky-50',
   small: 'text-emerald-600 bg-emerald-50',
   medium: 'text-amber-600 bg-amber-50',
   large: 'text-rose-600 bg-rose-50',
@@ -32,7 +33,7 @@ const recommendationLabels: Record<string, { label: string; color: string }> = {
   devin_fix: { label: 'Devin Fix', color: 'text-violet-700 bg-violet-50 ring-violet-200' },
   devin_investigate: { label: 'Investigate', color: 'text-sky-700 bg-sky-50 ring-sky-200' },
   human_review: { label: 'Human Review', color: 'text-amber-700 bg-amber-50 ring-amber-200' },
-  skip: { label: 'Skip', color: 'text-slate-600 bg-slate-50 ring-slate-200' },
+  close: { label: 'Close', color: 'text-slate-600 bg-slate-50 ring-slate-200' },
 };
 
 type SortField = 'title' | 'days_stale' | 'complexity' | 'confidence' | 'status';
@@ -79,7 +80,7 @@ export function IssuesTable({ issues, loading, onSelectIssue, selectedIssueId }:
           break;
 
         case 'complexity': {
-          const order = { small: 0, medium: 1, large: 2 };
+          const order = { trivial: 0, small: 1, medium: 2, large: 3 };
           cmp = (order[a.complexity as keyof typeof order] ?? 1) - (order[b.complexity as keyof typeof order] ?? 1);
           break;
         }

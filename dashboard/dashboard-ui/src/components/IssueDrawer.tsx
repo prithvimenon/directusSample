@@ -34,7 +34,7 @@ const recommendationLabels: Record<string, { label: string; desc: string }> = {
   devin_fix: { label: 'Devin Fix', desc: 'Devin can autonomously fix this issue' },
   devin_investigate: { label: 'Investigate', desc: 'Devin should investigate and propose a solution' },
   human_review: { label: 'Human Review', desc: 'Requires human judgment and review' },
-  skip: { label: 'Skip', desc: 'Not actionable at this time' },
+  close: { label: 'Close', desc: 'Not actionable at this time' },
 };
 
 export function IssueDrawer({ issue, runs, onClose }: IssueDrawerProps) {
