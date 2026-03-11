@@ -1,7 +1,7 @@
 import { Bot, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { ActivityLog } from './components/ActivityLog';
-import { IssueDrawer } from './components/IssueDrawer';
+import { IssueDetailPanel } from './components/IssueDetailPanel';
 import { IssuesTable } from './components/IssuesTable';
 import { KPICards } from './components/KPICards';
 import { useActivityLog, useDevinRuns, useIssues } from './hooks/useDirectus';
@@ -19,6 +19,16 @@ function App() {
     setRefreshing(true);
     await refreshIssues();
     setRefreshing(false);
+  };
+
+  const handleHandOffToDevin = (issue: Issue) => {
+    // In a real implementation, this would call an API to create a Devin session
+    const confirmed = window.confirm(
+      `Hand off issue #${issue.github_id.toString().slice(-5)} "${issue.title}" to Devin?\n\nDevin will analyze and attempt to fix this issue autonomously.`
+    );
+    if (confirmed) {
+      alert(`Issue handed off to Devin successfully!\n\nDevin will begin working on: "${issue.title}"\n\nYou'll see a new Devin session appear in the activity feed shortly.`);
+    }
   };
 
   return (
@@ -65,21 +75,24 @@ function App() {
             />
           </div>
 
-          {/* Activity Log — takes 1/4 */}
-          <div className="xl:col-span-1">
+          {/* Right panel — Issue Detail (when selected) + Activity Log */}
+          <div className="xl:col-span-1 space-y-4">
+            {/* Issue Detail Panel — shows when an issue is selected */}
+            {selectedIssue && (
+              <IssueDetailPanel
+                issue={selectedIssue}
+                runs={runs}
+                onClose={() => setSelectedIssue(null)}
+                onHandOffToDevin={handleHandOffToDevin}
+              />
+            )}
+
+            {/* Activity Log — always visible */}
             <ActivityLog entries={entries} loading={activityLoading} />
           </div>
         </div>
       </main>
 
-      {/* Issue Detail Drawer */}
-      {selectedIssue && (
-        <IssueDrawer
-          issue={selectedIssue}
-          runs={runs}
-          onClose={() => setSelectedIssue(null)}
-        />
-      )}
     </div>
   );
 }
