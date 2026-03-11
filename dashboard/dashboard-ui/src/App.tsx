@@ -82,6 +82,7 @@ function App() {
               <IssueDetailPanel
                 issue={selectedIssue}
                 runs={runs}
+                activityEntries={entries}
                 onClose={() => setSelectedIssue(null)}
                 onHandOffToDevin={handleHandOffToDevin}
               />
