@@ -29,7 +29,7 @@ The production build is served at http://localhost:4173.
 **Important:** Dev mode (`npm run dev`) may have Tailwind CSS rendering issues (raw @tailwind directives visible instead of compiled styles). This is a known Vite HMR/PostCSS caching issue. Always use the production build (`npm run build` + `npx vite preview`) for visual testing.
 
 ### 4. CORS
-The `docker-compose.yml` includes `CORS_ENABLED=true` and `CORS_ORIGIN=*`. If CORS errors appear, verify these env vars are present.
+The `docker-compose.yml` includes `CORS_ENABLED=true` and `CORS_ORIGIN=true`. If CORS errors appear, verify these env vars are present.
 
 ## What to Test
 
