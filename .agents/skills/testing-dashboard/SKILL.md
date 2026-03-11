@@ -1,77 +1,67 @@
 # Testing the Issue Autopilot Dashboard
 
 ## Overview
-The `dashboard/` directory contains a standalone Directus-based backend for the Issue Autopilot feature. It runs separately from the main Directus monorepo.
+The dashboard is a standalone React + Vite app (`dashboard/dashboard-ui/`) that consumes data from a Directus backend (`dashboard/docker-compose.yml`).
 
-## Prerequisites
-- Docker and Docker Compose installed
-- Node.js 18+
-- `GITHUB_TOKEN` env var (GitHub PAT with public repo read access) for real issue ingestion
+## Devin Secrets Needed
+- `GITHUB_API_TOKEN` — GitHub PAT for seeding issues from `directus/directus` (public repo read access). Without this, the seed script falls back to unauthenticated API calls (60 req/hr limit which may be exhausted).
 
-## Setup Steps
+## Local Testing Setup
 
-### 1. Start Docker Stack
+### 1. Start Directus + PostgreSQL
 ```bash
-cd dashboard
-docker compose up -d
+cd dashboard && docker compose up -d
 ```
-Wait for Directus to be healthy:
+Wait ~30s for Directus to initialize. Verify at http://localhost:8055 (admin@example.com / admin123).
+
+### 2. Bootstrap schema + seed data
 ```bash
-for i in $(seq 1 30); do
-  curl -s -o /dev/null -w "%{http_code}" http://localhost:8055/server/health | grep -q "200" && echo "Ready" && break
-  sleep 2
-done
+cd dashboard && npm install && npm run bootstrap && GITHUB_TOKEN=$GITHUB_API_TOKEN npm run seed
 ```
+This creates 3 collections (issues, devin_runs, activity_log) and seeds 50 issues, 12 devin_runs, 57 activity_log entries.
 
-### 2. Install Dependencies
+### 3. Build and serve the frontend
 ```bash
-cd dashboard && npm install
+cd dashboard/dashboard-ui && npm install && npm run build && npx vite preview --port 4173
 ```
+The production build is served at http://localhost:4173.
 
-### 3. Run Bootstrap
+**Important:** Dev mode (`npm run dev`) may have Tailwind CSS rendering issues (raw @tailwind directives visible instead of compiled styles). This is a known Vite HMR/PostCSS caching issue. Always use the production build (`npm run build` + `npx vite preview`) for visual testing.
+
+### 4. CORS
+The `docker-compose.yml` includes `CORS_ENABLED=true` and `CORS_ORIGIN=*`. If CORS errors appear, verify these env vars are present.
+
+## What to Test
+
+### KPI Cards (top row)
+- 6 metric cards: Total Issues, In Progress, PRs Open, Merged, Escalated, Avg Age
+- Should show clean white styling with slate borders (no colorful gradients)
+
+### Issues Table
+- Full issue titles visible (no truncation)
+- Sortable columns, status filter bar
+- Clicking a row opens the detail panel on the right
+
+### Issue Detail Panel (right side)
+- Shows issue metadata, recommendation, labels, description
+- Monochrome/neutral palette — color used only for status badges and functional indicators
+- **Unassigned issues**: Shows "Hand off to Devin" button (currently a mock/confirm dialog)
+- **In-progress issues**: Shows "Devin Progress" timeline with activity log steps + "Open Devin Session" button
+
+### Activity Feed
+- Always visible at bottom of right column
+- Shows recent autopilot events with icons and relative timestamps
+
+### Status Filters
+Use the filter bar to test each status: unreviewed, candidate, approved, in_progress, pr_opened, merged, escalated
+
+## Lint and Build
 ```bash
-node scripts/bootstrap-schema.mjs
+cd dashboard/dashboard-ui && npm run lint && npm run build
 ```
-Expected output: Creates 3 collections (issues, devin_runs, activity_log), sets public read permissions.
+Also supports TypeScript checking: `npx tsc --noEmit`
 
-### 4. Run Seed (requires GITHUB_TOKEN)
-```bash
-GITHUB_TOKEN=ghp_xxx node scripts/seed.mjs
-```
-Expected: Fetches 300+ issues from directus/directus, computes heuristics, batch-inserts.
-
-### 5. Verify in Admin UI
-- Open http://localhost:8055
-- Login: admin@example.com / admin123 (defaults, configurable via env vars)
-- Check Issues collection has populated data
-- Check Devin Runs and Activity Log are empty
-
-## Key Technical Details
-
-### Directus v11.16+ Specifics
-- **Policy-based permissions**: Public read permissions use `/policies` endpoint to find the public policy (where `admin_access === false && app_access === false`), NOT the old `role: null` approach.
-- **Default integer PKs**: Directus creates auto-increment integer primary keys by default, NOT UUIDs. Foreign key fields must use `type: 'integer'` to match.
-- **bigInteger for GitHub IDs**: GitHub global node IDs can exceed 32-bit integer range. Use `bigInteger` type.
-
-### Port Conflicts
-- Dashboard Postgres runs on port 5432 — may conflict with root docker-compose if both are running
-- Dashboard Directus runs on port 8055
-
-### Testing Without GITHUB_TOKEN
-GitHub API has a 60 req/hr unauthenticated rate limit. For testing the Directus insertion pipeline without a token, create mock issues and insert them directly via the Directus API.
-
-### Idempotency
-- Bootstrap is idempotent: re-running skips existing collections
-- Seed is idempotent: deduplicates by `github_id`
-
-### Environment Variables
-- `DIRECTUS_URL` (default: http://localhost:8055)
-- `DIRECTUS_ADMIN_EMAIL` (default: admin@example.com)
-- `DIRECTUS_ADMIN_PASSWORD` (default: admin123)
-- `DIRECTUS_SECRET` (default: change-me-to-a-secure-random-value)
-- `GITHUB_TOKEN` (required for seed script)
-
-## Cleanup
+## Teardown
 ```bash
 cd dashboard && docker compose down -v
 ```
