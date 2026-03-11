@@ -1,0 +1,14 @@
+{
+  "name": "issue-autopilot-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bootstrap": "node scripts/bootstrap-schema.mjs",
+    "seed": "node scripts/seed.mjs",
+    "setup": "npm run bootstrap && npm run seed"
+  },
+  "dependencies": {
+    "@directus/sdk": "^18.0.0"
+  }
+}
