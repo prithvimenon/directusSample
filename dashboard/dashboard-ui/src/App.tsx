@@ -76,9 +76,9 @@ function App() {
         <KPICards issues={issues} runs={runs} />
 
         {/* Table + Activity split */}
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-4">
-          {/* Issues Table — takes 3/4 */}
-          <div className="xl:col-span-3">
+        <div className="flex flex-col xl:flex-row gap-6">
+          {/* Issues Table — takes ~65% */}
+          <div className="xl:w-[65%] min-w-0">
             <IssuesTable
               issues={issues}
               loading={issuesLoading || runsLoading}
@@ -87,8 +87,8 @@ function App() {
             />
           </div>
 
-          {/* Right panel — Issue Detail (when selected) + Activity Log */}
-          <div className="xl:col-span-1 space-y-4">
+          {/* Right panel — Issue Detail (when selected) + Activity Log — takes ~35% */}
+          <div className="xl:w-[35%] min-w-0 space-y-4">
             {/* Issue Detail Panel — shows when an issue is selected */}
             {selectedIssue && (
               <IssueDetailPanel

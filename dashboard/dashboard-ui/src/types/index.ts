@@ -21,6 +21,7 @@ export type EventType =
   | 'devin_started'
   | 'pr_opened'
   | 'pr_merged'
+  | 'awaiting_review'
   | 'escalated';
 
 export interface Issue {
