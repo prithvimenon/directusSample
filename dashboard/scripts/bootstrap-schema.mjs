@@ -130,7 +130,7 @@ async function bootstrapIssues(token) {
   });
 
   const fields = [
-    { field: 'github_id', type: 'integer', schema: { is_nullable: false, is_unique: true }, meta: { required: true } },
+    { field: 'github_id', type: 'bigInteger', schema: { is_nullable: false, is_unique: true }, meta: { required: true } },
     { field: 'repo', type: 'string', schema: {}, meta: {} },
     { field: 'title', type: 'string', schema: {}, meta: {} },
     { field: 'body', type: 'text', schema: {}, meta: {} },
@@ -220,7 +220,7 @@ async function bootstrapDevinRuns(token) {
   });
 
   const fields = [
-    { field: 'issue', type: 'uuid', schema: { is_nullable: true }, meta: {} },
+    { field: 'issue', type: 'integer', schema: { is_nullable: true }, meta: {} },
     { field: 'session_id', type: 'string', schema: {}, meta: {} },
     {
       field: 'status',
@@ -299,8 +299,8 @@ async function bootstrapActivityLog(token) {
         },
       },
     },
-    { field: 'issue', type: 'uuid', schema: { is_nullable: true }, meta: {} },
-    { field: 'devin_run', type: 'uuid', schema: { is_nullable: true }, meta: {} },
+    { field: 'issue', type: 'integer', schema: { is_nullable: true }, meta: {} },
+    { field: 'devin_run', type: 'integer', schema: { is_nullable: true }, meta: {} },
     { field: 'message', type: 'string', schema: {}, meta: {} },
   ];
 
@@ -331,15 +331,38 @@ async function bootstrapActivityLog(token) {
 
 // ── public permissions ───────────────────────────────────────────────────────
 
+async function getPublicPolicyId(token) {
+  const res = await fetch(`${DIRECTUS_URL}/policies`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to fetch policies (${res.status})`);
+  }
+
+  const { data } = await res.json();
+
+  const publicPolicy = data.find((p) => p.admin_access === false && p.app_access === false);
+
+  if (!publicPolicy) {
+    throw new Error('No public policy found — cannot set public read permissions');
+  }
+
+  return publicPolicy.id;
+}
+
 async function setPublicReadPermissions(token) {
   console.log('Setting public read permissions…');
+
+  const policyId = await getPublicPolicyId(token);
+  console.log(`  Found public policy: ${policyId}`);
 
   const collections = ['issues', 'devin_runs', 'activity_log'];
 
   for (const collection of collections) {
     try {
       await createPermission(token, {
-        role: null,
+        policy: policyId,
         collection,
         action: 'read',
         fields: ['*'],

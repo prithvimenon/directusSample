@@ -20,8 +20,8 @@ services:
       - database
     environment:
       SECRET: '${DIRECTUS_SECRET:-change-me-to-a-secure-random-value}'
-      ADMIN_EMAIL: 'admin@example.com'
-      ADMIN_PASSWORD: 'admin123'
+      ADMIN_EMAIL: '${DIRECTUS_ADMIN_EMAIL:-admin@example.com}'
+      ADMIN_PASSWORD: '${DIRECTUS_ADMIN_PASSWORD:-admin123}'
       DB_CLIENT: 'pg'
       DB_HOST: 'database'
       DB_PORT: '5432'
