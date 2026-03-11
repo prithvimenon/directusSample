@@ -258,7 +258,7 @@ async function main() {
       console.log(`\nCreated ${created} issues in Directus, skipped ${skipped} duplicates`);
     }
 
-    console.log(`\nSeed complete! Total issues ingested: ${allRecords.length}`);
+    console.log(`\nSeed complete! Total issues fetched: ${allRecords.length}, newly ingested: ${newRecords.length}`);
   } catch (err) {
     console.error('Seed failed:', err.message);
     process.exit(1);
