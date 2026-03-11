@@ -17,8 +17,8 @@ if (!GITHUB_TOKEN) {
 }
 
 const GITHUB_REPO = 'directus/directus';
-const PER_PAGE = 50;
-const MAX_ISSUES = 50;
+const PER_PAGE = 100;
+const MAX_ISSUES = 300;
 const BATCH_SIZE = 100;
 
 // ── helpers ──────────────────────────────────────────────────────────────────

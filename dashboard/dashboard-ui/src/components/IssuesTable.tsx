@@ -30,8 +30,8 @@ const complexityColors: Record<string, string> = {
 };
 
 const recommendationLabels: Record<string, { label: string; color: string }> = {
-  devin_fix: { label: 'Devin Fix', color: 'text-violet-700 bg-violet-50 ring-violet-200' },
-  devin_investigate: { label: 'Investigate', color: 'text-sky-700 bg-sky-50 ring-sky-200' },
+  devin_fix: { label: 'Good Devin Candidate', color: 'text-violet-700 bg-violet-50 ring-violet-200' },
+  devin_investigate: { label: 'Needs Scoping', color: 'text-sky-700 bg-sky-50 ring-sky-200' },
   human_review: { label: 'Human Review', color: 'text-amber-700 bg-amber-50 ring-amber-200' },
   close: { label: 'Close', color: 'text-slate-600 bg-slate-50 ring-slate-200' },
 };

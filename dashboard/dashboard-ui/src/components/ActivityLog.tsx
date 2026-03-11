@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   CheckCircle2,
+  Clock,
   GitMerge,
   GitPullRequest,
   Inbox,
@@ -19,8 +20,37 @@ const eventConfig: Record<EventType, { icon: typeof Inbox; color: string; bg: st
   devin_started: { icon: Play, color: 'text-amber-500', bg: 'bg-amber-100' },
   pr_opened: { icon: GitPullRequest, color: 'text-purple-500', bg: 'bg-purple-100' },
   pr_merged: { icon: GitMerge, color: 'text-emerald-500', bg: 'bg-emerald-100' },
+  awaiting_review: { icon: Clock, color: 'text-amber-500', bg: 'bg-amber-100' },
   escalated: { icon: AlertTriangle, color: 'text-rose-500', bg: 'bg-rose-100' },
 };
+
+/* Map system event messages to outcome-oriented labels */
+const outcomeMessages: Record<string, string> = {
+  'Issue ingested': 'Issue added to backlog',
+  'Issue ingested from directus/directus': 'Issue added to backlog',
+  'Devin session started': 'Devin started implementation',
+  'Issue approved and queued': 'Approved for autonomous fix',
+  'Issue approved': 'Approved for autonomous fix',
+  'PR opened': 'PR opened for review',
+  'PR merged': 'Merged',
+  'Escalated to human': 'Escalated to human owner',
+  'Escalated': 'Escalated to human owner',
+};
+
+function getOutcomeMessage(original: string): string {
+  // Check exact match first
+  if (outcomeMessages[original]) return outcomeMessages[original];
+  // Check prefix matches
+  const lower = original.toLowerCase();
+  if (lower.startsWith('issue ingested')) return 'Issue added to backlog';
+  if (lower.startsWith('devin session started') || lower.startsWith('devin started')) return 'Devin started implementation';
+  if (lower.startsWith('issue approved')) return 'Approved for autonomous fix';
+  if (lower.startsWith('pr opened') || lower.startsWith('pull request opened')) return 'PR opened for review';
+  if (lower.startsWith('pr merged') || lower.startsWith('pull request merged')) return 'Merged';
+  if (lower.startsWith('escalat')) return 'Escalated to human owner';
+  if (lower.startsWith('awaiting review')) return 'Awaiting reviewer';
+  return original;
+}
 
 function timeAgo(dateStr: string): string {
   const now = Date.now();
@@ -68,7 +98,7 @@ export function ActivityLog({ entries, loading }: ActivityLogProps) {
                 <Icon className={`h-3.5 w-3.5 ${config.color}`} />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm text-slate-700 leading-snug truncate">{entry.message}</p>
+                <p className="text-sm text-slate-700 leading-snug truncate">{getOutcomeMessage(entry.message)}</p>
                 <p className="text-xs text-slate-400 mt-0.5">{timeAgo(entry.timestamp)}</p>
               </div>
             </div>
