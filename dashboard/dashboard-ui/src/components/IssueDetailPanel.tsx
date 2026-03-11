@@ -20,6 +20,8 @@ interface IssueDetailPanelProps {
   activityEntries: ActivityLogEntry[];
   onClose: () => void;
   onHandOffToDevin: (issue: Issue) => void;
+  handingOff?: boolean;
+  handOffError?: string | null;
 }
 
 function formatDate(dateStr: string): string {
@@ -63,7 +65,7 @@ const recommendationLabels: Record<string, { label: string; desc: string }> = {
   close: { label: 'Close', desc: 'Not actionable at this time' },
 };
 
-export function IssueDetailPanel({ issue, runs, activityEntries, onClose, onHandOffToDevin }: IssueDetailPanelProps) {
+export function IssueDetailPanel({ issue, runs, activityEntries, onClose, onHandOffToDevin, handingOff, handOffError }: IssueDetailPanelProps) {
   const issueRuns = runs.filter((r) => {
     const runIssueId = typeof r.issue === 'object' ? r.issue.id : r.issue;
     return runIssueId === issue.id;
@@ -257,12 +259,22 @@ export function IssueDetailPanel({ issue, runs, activityEntries, onClose, onHand
       <div className="border-t border-slate-100 px-5 py-3 space-y-2">
         {/* Hand off to Devin button */}
         {!hasDevinRun && (issue.status === 'unreviewed' || issue.status === 'candidate' || issue.status === 'approved') && (
-          <button
-            onClick={() => onHandOffToDevin(issue)}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-slate-800"
-          >
-            <Bot className="h-4 w-4" /> Hand off to Devin
-          </button>
+          <>
+            <button
+              onClick={() => onHandOffToDevin(issue)}
+              disabled={handingOff}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {handingOff ? (
+                <><Loader2 className="h-4 w-4 animate-spin" /> Creating Devin session...</>
+              ) : (
+                <><Bot className="h-4 w-4" /> Hand off to Devin</>
+              )}
+            </button>
+            {handOffError && (
+              <p className="text-xs text-rose-600 text-center">{handOffError}</p>
+            )}
+          </>
         )}
 
         {/* Open Devin Session button — shown when there's an active run */}

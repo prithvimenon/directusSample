@@ -39,30 +39,44 @@ export function useDevinRuns() {
   const [runs, setRuns] = useState<DevinRun[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchJSON<DevinRun[]>(
-      `${API_URL}/items/devin_runs?fields=*,issue.id,issue.title&sort=-started_at`
-    )
-      .then(setRuns)
-      .catch(() => { /* silently fail */ })
-      .finally(() => setLoading(false));
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await fetchJSON<DevinRun[]>(
+        `${API_URL}/items/devin_runs?fields=*,issue.id,issue.title&sort=-started_at`
+      );
+      setRuns(data);
+    } catch {
+      // silently fail
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  return { runs, loading };
+  useEffect(() => { refresh(); }, [refresh]);
+
+  return { runs, loading, refresh };
 }
 
 export function useActivityLog() {
   const [entries, setEntries] = useState<ActivityLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchJSON<ActivityLogEntry[]>(
-      `${API_URL}/items/activity_log?sort=-timestamp&limit=50`
-    )
-      .then(setEntries)
-      .catch(() => { /* silently fail */ })
-      .finally(() => setLoading(false));
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await fetchJSON<ActivityLogEntry[]>(
+        `${API_URL}/items/activity_log?sort=-timestamp&limit=50`
+      );
+      setEntries(data);
+    } catch {
+      // silently fail
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  return { entries, loading };
+  useEffect(() => { refresh(); }, [refresh]);
+
+  return { entries, loading, refresh };
 }

@@ -1,33 +1,45 @@
 import { Bot, RefreshCw } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityLog } from './components/ActivityLog';
 import { IssueDetailPanel } from './components/IssueDetailPanel';
 import { IssuesTable } from './components/IssuesTable';
 import { KPICards } from './components/KPICards';
+import { useDevinApi } from './hooks/useDevinApi';
 import { useActivityLog, useDevinRuns, useIssues } from './hooks/useDirectus';
 import type { Issue } from './types';
 import './App.css';
 
 function App() {
   const { issues, loading: issuesLoading, refresh: refreshIssues } = useIssues();
-  const { runs, loading: runsLoading } = useDevinRuns();
-  const { entries, loading: activityLoading } = useActivityLog();
+  const { runs, loading: runsLoading, refresh: refreshRuns } = useDevinRuns();
+  const { entries, loading: activityLoading, refresh: refreshActivity } = useActivityLog();
+  const { createSession, clearError, loading: handingOff, error: handOffError } = useDevinApi();
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Clear hand-off error when switching issues so stale errors don't leak
+  useEffect(() => {
+    clearError();
+  }, [selectedIssue, clearError]);
+
   const handleRefresh = async () => {
     setRefreshing(true);
-    await refreshIssues();
+    await Promise.all([refreshIssues(), refreshRuns(), refreshActivity()]);
     setRefreshing(false);
   };
 
-  const handleHandOffToDevin = (issue: Issue) => {
-    // In a real implementation, this would call an API to create a Devin session
+  const handleHandOffToDevin = async (issue: Issue) => {
     const confirmed = window.confirm(
       `Hand off issue #${issue.github_id.toString().slice(-5)} "${issue.title}" to Devin?\n\nDevin will analyze and attempt to fix this issue autonomously.`
     );
-    if (confirmed) {
-      alert(`Issue handed off to Devin successfully!\n\nDevin will begin working on: "${issue.title}"\n\nYou'll see a new Devin session appear in the activity feed shortly.`);
+    if (!confirmed) return;
+
+    const result = await createSession(issue);
+    if (result) {
+      // Refresh all data to show the new Devin run and activity
+      await Promise.all([refreshIssues(), refreshRuns(), refreshActivity()]);
+      // Open the Devin session in a new tab
+      window.open(result.url, '_blank');
     }
   };
 
@@ -85,6 +97,8 @@ function App() {
                 activityEntries={entries}
                 onClose={() => setSelectedIssue(null)}
                 onHandOffToDevin={handleHandOffToDevin}
+                handingOff={handingOff}
+                handOffError={handOffError}
               />
             )}
 
