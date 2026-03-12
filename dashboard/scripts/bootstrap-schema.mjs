@@ -194,6 +194,14 @@ async function bootstrapIssues(token) {
     },
     { field: 'approved_by', type: 'string', schema: { is_nullable: true }, meta: {} },
     { field: 'approved_at', type: 'timestamp', schema: { is_nullable: true }, meta: {} },
+    // Triage fields — populated by Devin triage agent at ingest time
+    { field: 'triage_summary', type: 'text', schema: { is_nullable: true }, meta: { note: 'AI-generated summary of the issue and suggested approach' } },
+    { field: 'relevant_files', type: 'json', schema: { is_nullable: true }, meta: { note: 'Array of file paths likely involved in fixing this issue' } },
+    { field: 'suggested_approach', type: 'text', schema: { is_nullable: true }, meta: { note: 'AI-generated step-by-step approach for fixing the issue' } },
+    { field: 'risk_areas', type: 'json', schema: { is_nullable: true }, meta: { note: 'Array of risk areas or concerns about the fix' } },
+    { field: 'estimated_effort', type: 'string', schema: { is_nullable: true }, meta: { note: 'AI-estimated effort: quick_fix, moderate, significant, major' } },
+    { field: 'triage_session_id', type: 'string', schema: { is_nullable: true }, meta: { note: 'Devin session ID used for triage analysis' } },
+    { field: 'triaged_at', type: 'timestamp', schema: { is_nullable: true }, meta: { note: 'When the triage analysis was completed' } },
   ];
 
   for (const f of fields) {

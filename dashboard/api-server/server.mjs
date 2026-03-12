@@ -38,19 +38,81 @@ app.post('/api/devin/sessions', async (req, res) => {
       return res.status(400).json({ error: 'issueId and title are required' });
     }
 
+    // 0. Fetch triage data from Directus (if available) to enrich the prompt
+    let triageContext = '';
+
+    try {
+      const triageTokenRes = await fetch(`${DIRECTUS_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: process.env.DIRECTUS_ADMIN_EMAIL || 'admin@example.com',
+          password: process.env.DIRECTUS_ADMIN_PASSWORD || 'admin123',
+        }),
+      });
+
+      if (triageTokenRes.ok) {
+        const triageTokenData = await triageTokenRes.json();
+
+        const triageRes = await fetch(
+          `${DIRECTUS_URL}/items/issues/${issueId}?fields=triage_summary,relevant_files,suggested_approach,risk_areas,estimated_effort`,
+          { headers: { Authorization: `Bearer ${triageTokenData.data.access_token}` } },
+        );
+
+        if (triageRes.ok) {
+          const { data: triage } = await triageRes.json();
+
+          if (triage.triage_summary) {
+            const parts = [];
+            parts.push(`## Triage Analysis (AI-generated context)`);
+            parts.push(`**Summary:** ${triage.triage_summary}`);
+
+            if (triage.suggested_approach) {
+              parts.push(`**Suggested Approach:**\n${triage.suggested_approach}`);
+            }
+
+            if (triage.relevant_files && triage.relevant_files.length > 0) {
+              parts.push(`**Key Files:** ${triage.relevant_files.join(', ')}`);
+            }
+
+            if (triage.risk_areas && triage.risk_areas.length > 0) {
+              parts.push(`**Risk Areas:** ${triage.risk_areas.join('; ')}`);
+            }
+
+            if (triage.estimated_effort) {
+              parts.push(`**Estimated Effort:** ${triage.estimated_effort.replace('_', ' ')}`);
+            }
+
+            triageContext = parts.join('\n\n');
+          }
+        }
+      }
+    } catch (triageErr) {
+      console.warn('Could not fetch triage data (non-blocking):', triageErr.message);
+    }
+
     // 1. Create a Devin session via the Devin API
-    const prompt = [
+    const promptParts = [
       `Fix the following GitHub issue:`,
       ``,
       `**Issue:** ${title}`,
       `**Repository:** ${repo}`,
       `**GitHub URL:** ${github_url}`,
+    ];
+
+    if (triageContext) {
+      promptParts.push(``, triageContext, ``);
+    }
+
+    promptParts.push(
       ``,
       `**Description:**`,
       body ? (body.length > 2000 ? body.slice(0, 2000) + '...' : body) : 'No description provided.',
       ``,
       `Please analyze the issue, implement a fix, and open a pull request.`,
-    ].join('\n');
+    );
+
+    const prompt = promptParts.join('\n');
 
     console.log(`Creating Devin session for issue #${issueId}: "${title}"`);
 
@@ -117,6 +179,7 @@ app.post('/api/devin/sessions', async (req, res) => {
     });
 
     let devinRunId = null;
+
     if (runRes.ok) {
       const runData = await runRes.json();
       devinRunId = runData.data.id;
@@ -189,6 +252,240 @@ app.get('/api/devin/sessions/:sessionId', async (req, res) => {
   } catch (err) {
     console.error('Error fetching Devin session:', err);
     return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * POST /api/triage/analyze-issues
+ * Triggers the triage agent to analyze untriaged issues via the Devin API.
+ * Body (optional): { limit?: number, issueId?: number, force?: boolean }
+ */
+app.post('/api/triage/analyze-issues', async (req, res) => {
+  try {
+    const { limit = 5, issueId = null, force = false } = req.body || {};
+
+    // 1. Authenticate with Directus
+    const tokenRes = await fetch(`${DIRECTUS_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: process.env.DIRECTUS_ADMIN_EMAIL || 'admin@example.com',
+        password: process.env.DIRECTUS_ADMIN_PASSWORD || 'admin123',
+      }),
+    });
+
+    if (!tokenRes.ok) {
+      return res.status(500).json({ error: 'Failed to authenticate with Directus' });
+    }
+
+    const tokenData = await tokenRes.json();
+    const directusToken = tokenData.data.access_token;
+
+    // 2. Fetch issues to analyze
+    let fetchUrl;
+
+    if (issueId) {
+      fetchUrl = `${DIRECTUS_URL}/items/issues/${issueId}`;
+    } else {
+      const filter = force ? '' : '&filter[triage_summary][_null]=true';
+      fetchUrl = `${DIRECTUS_URL}/items/issues?limit=${limit}&sort=-days_stale${filter}`;
+    }
+
+    const issuesRes = await fetch(fetchUrl, {
+      headers: { Authorization: `Bearer ${directusToken}` },
+    });
+
+    if (!issuesRes.ok) {
+      return res.status(500).json({ error: 'Failed to fetch issues from Directus' });
+    }
+
+    const issuesJson = await issuesRes.json();
+    const issues = issueId ? [issuesJson.data] : issuesJson.data || [];
+
+    if (issues.length === 0) {
+      return res.json({ message: 'No untriaged issues found', sessions: [] });
+    }
+
+    console.log(`Triage: analyzing ${issues.length} issue(s)...`);
+
+    // 3. Create Devin triage sessions for each issue (fire-and-forget polling)
+    const sessions = [];
+
+    for (const issue of issues) {
+      try {
+        const labels = (issue.labels || []).join(', ') || 'none';
+
+        const bodyText = issue.body
+          ? issue.body.length > 3000
+            ? issue.body.slice(0, 3000) + '... (truncated)'
+            : issue.body
+          : 'No description provided.';
+
+        const prompt = [
+          'You are a senior software engineer triaging a GitHub issue for the directus/directus repository.',
+          'Analyze this issue against the codebase and update structured output with:',
+          '1. What files are involved, 2. Fix approach, 3. Risk areas, 4. Confidence score.',
+          '',
+          `**Title:** ${issue.title}`,
+          `**Repository:** ${issue.repo}`,
+          `**GitHub URL:** ${issue.github_url}`,
+          `**Labels:** ${labels}`,
+          '',
+          '**Description:**',
+          bodyText,
+          '',
+          'Update structured output immediately with your analysis.',
+        ].join('\n');
+
+        const devinRes = await fetch(`${DEVIN_API_URL}/sessions`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${DEVIN_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            prompt,
+            title: `Triage: ${issue.title.slice(0, 80)}`,
+            tags: ['triage', 'autopilot', 'github-issue'],
+            structured_output_schema: {
+              type: 'object',
+              properties: {
+                triage_summary: { type: 'string' },
+                relevant_files: { type: 'array', items: { type: 'string' } },
+                suggested_approach: { type: 'string' },
+                risk_areas: { type: 'array', items: { type: 'string' } },
+                estimated_effort: { type: 'string', enum: ['quick_fix', 'moderate', 'significant', 'major'] },
+                complexity: { type: 'string', enum: ['trivial', 'small', 'medium', 'large'] },
+                confidence: { type: 'number', minimum: 0, maximum: 1 },
+                recommended_action: { type: 'string', enum: ['devin_fix', 'devin_investigate', 'human_review', 'close'] },
+              },
+              required: ['triage_summary', 'relevant_files', 'suggested_approach', 'risk_areas', 'estimated_effort', 'complexity', 'confidence', 'recommended_action'],
+            },
+            idempotent: false,
+          }),
+        });
+
+        if (devinRes.ok) {
+          const devinData = await devinRes.json();
+          console.log(`  Triage session created for issue ${issue.id}: ${devinData.session_id}`);
+
+          // Store the triage_session_id immediately
+          await fetch(`${DIRECTUS_URL}/items/issues/${issue.id}`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${directusToken}`,
+            },
+            body: JSON.stringify({ triage_session_id: devinData.session_id }),
+          });
+
+          sessions.push({
+            issueId: issue.id,
+            issueTitle: issue.title,
+            sessionId: devinData.session_id,
+            sessionUrl: devinData.url,
+          });
+        } else {
+          const errText = await devinRes.text();
+          console.error(`  Failed to create triage session for issue ${issue.id}: ${errText}`);
+        }
+      } catch (issueErr) {
+        console.error(`  Error triaging issue ${issue.id}:`, issueErr.message);
+      }
+    }
+
+    return res.json({
+      message: `Created ${sessions.length} triage session(s). Results will be stored when sessions complete.`,
+      sessions,
+      note: 'Use the analyze-issues.mjs CLI script for synchronous polling, or poll GET /api/devin/sessions/:sessionId to check status.',
+    });
+  } catch (err) {
+    console.error('Error in triage endpoint:', err);
+    return res.status(500).json({ error: 'Internal server error', details: String(err) });
+  }
+});
+
+/**
+ * POST /api/triage/store-result
+ * Webhook-style endpoint to store triage results from a completed Devin session.
+ * Body: { issueId: number, sessionId: string }
+ */
+app.post('/api/triage/store-result', async (req, res) => {
+  try {
+    const { issueId, sessionId } = req.body;
+
+    if (!issueId || !sessionId) {
+      return res.status(400).json({ error: 'issueId and sessionId are required' });
+    }
+
+    // 1. Fetch session data from Devin API
+    const devinRes = await fetch(`${DEVIN_API_URL}/sessions/${sessionId}`, {
+      headers: { Authorization: `Bearer ${DEVIN_API_KEY}` },
+    });
+
+    if (!devinRes.ok) {
+      return res.status(502).json({ error: 'Failed to fetch session from Devin API' });
+    }
+
+    const sessionData = await devinRes.json();
+    const output = sessionData.structured_output;
+
+    if (!output) {
+      return res.status(404).json({ error: 'No structured output in session' });
+    }
+
+    const triageData = typeof output === 'string' ? JSON.parse(output) : output;
+
+    // 2. Authenticate with Directus
+    const tokenRes = await fetch(`${DIRECTUS_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: process.env.DIRECTUS_ADMIN_EMAIL || 'admin@example.com',
+        password: process.env.DIRECTUS_ADMIN_PASSWORD || 'admin123',
+      }),
+    });
+
+    if (!tokenRes.ok) {
+      return res.status(500).json({ error: 'Failed to authenticate with Directus' });
+    }
+
+    const tokenData = await tokenRes.json();
+    const directusToken = tokenData.data.access_token;
+
+    // 3. Update the issue
+    const patch = {
+      triage_summary: triageData.triage_summary || null,
+      relevant_files: triageData.relevant_files || [],
+      suggested_approach: triageData.suggested_approach || null,
+      risk_areas: triageData.risk_areas || [],
+      estimated_effort: triageData.estimated_effort || null,
+      complexity: triageData.complexity || null,
+      confidence: triageData.confidence != null ? triageData.confidence : null,
+      recommended_action: triageData.recommended_action || null,
+      triage_session_id: sessionId,
+      triaged_at: new Date().toISOString(),
+    };
+
+    const patchRes = await fetch(`${DIRECTUS_URL}/items/issues/${issueId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${directusToken}`,
+      },
+      body: JSON.stringify(patch),
+    });
+
+    if (!patchRes.ok) {
+      const errText = await patchRes.text();
+      return res.status(500).json({ error: `Failed to update issue: ${errText}` });
+    }
+
+    console.log(`Stored triage result for issue ${issueId} from session ${sessionId}`);
+    return res.json({ success: true, issueId, patch });
+  } catch (err) {
+    console.error('Error storing triage result:', err);
+    return res.status(500).json({ error: 'Internal server error', details: String(err) });
   }
 });
 
