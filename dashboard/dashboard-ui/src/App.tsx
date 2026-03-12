@@ -1,5 +1,5 @@
 import { Bot, RefreshCw } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityLog } from './components/ActivityLog';
 import { IssueDetailPanel } from './components/IssueDetailPanel';
 import { IssuesTable } from './components/IssuesTable';
@@ -13,18 +13,41 @@ function App() {
   const { issues, loading: issuesLoading, refresh: refreshIssues } = useIssues();
   const { runs, loading: runsLoading, refresh: refreshRuns } = useDevinRuns();
   const { entries, loading: activityLoading, refresh: refreshActivity } = useActivityLog();
-  const { createSession, clearError, loading: handingOff, error: handOffError } = useDevinApi();
+  const { createSession, triggerTriage, getTriageStatus, clearError, loading: handingOff, error: handOffError } = useDevinApi();
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Clear hand-off error when switching issues so stale errors don't leak
+  const API_BASE = import.meta.env.VITE_API_URL || '';
+
+  // On mount, reconcile any triage sessions whose results were never stored
+  // (e.g. browser polling stopped due to page refresh)
+  const reconcileTriage = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/triage/reconcile`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.reconciled > 0) {
+          console.log(`Reconciled ${data.reconciled} triage result(s)`);
+          await refreshIssues();
+        }
+      }
+    } catch {
+      // Non-blocking — best-effort reconciliation
+    }
+  }, [API_BASE, refreshIssues]);
+
+  useEffect(() => {
+    reconcileTriage();
+  }, [reconcileTriage]);
+
+  // Clear hand-off error and triage state when switching issues so stale state doesn't leak
   useEffect(() => {
     clearError();
   }, [selectedIssue, clearError]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([refreshIssues(), refreshRuns(), refreshActivity()]);
+    await Promise.all([refreshIssues(), refreshRuns(), refreshActivity(), reconcileTriage()]);
     setRefreshing(false);
   };
 
@@ -43,6 +66,10 @@ function App() {
       // Open the Devin session in a new tab
       window.open(result.url, '_blank');
     }
+  };
+
+  const handleTriageIssue = async (issue: Issue) => {
+    await triggerTriage(issue);
   };
 
   return (
@@ -99,8 +126,10 @@ function App() {
                 activityEntries={entries}
                 onClose={() => setSelectedIssue(null)}
                 onHandOffToDevin={handleHandOffToDevin}
+                onTriageIssue={handleTriageIssue}
                 handingOff={handingOff}
                 handOffError={handOffError}
+                triageStatus={getTriageStatus(selectedIssue.id)}
               />
             )}
 

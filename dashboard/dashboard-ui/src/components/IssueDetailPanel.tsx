@@ -13,6 +13,7 @@ import {
   Lightbulb,
   Loader2,
   Play,
+  Search,
   ShieldAlert,
   Tag,
   X,
@@ -21,14 +22,23 @@ import {
 import type { ActivityLogEntry, DevinRun, Issue } from '../types';
 import { StatusBadge } from './StatusBadge';
 
+interface TriageStatus {
+  sessionId: string;
+  sessionUrl: string;
+  status: 'pending' | 'polling' | 'completed' | 'failed';
+  error?: string;
+}
+
 interface IssueDetailPanelProps {
   issue: Issue;
   runs: DevinRun[];
   activityEntries: ActivityLogEntry[];
   onClose: () => void;
   onHandOffToDevin: (issue: Issue) => void;
+  onTriageIssue: (issue: Issue) => void;
   handingOff?: boolean;
   handOffError?: string | null;
+  triageStatus?: TriageStatus | null;
 }
 
 function formatDate(dateStr: string): string {
@@ -84,14 +94,52 @@ const lifecycleStages = [
   { key: 'merged', label: 'Merged' },
 ] as const;
 
-function getLifecycleStageIndex(issueStatus: string, latestRunStatus?: string): number {
-  if (issueStatus === 'merged' || latestRunStatus === 'merged') return 6;
-  if (issueStatus === 'pr_opened' || latestRunStatus === 'pr_opened') return 4;
-  if (issueStatus === 'in_progress' || latestRunStatus === 'running') return 3;
-  if (issueStatus === 'approved') return 2;
-  if (issueStatus === 'candidate') return 1;
-  if (issueStatus === 'escalated') return -1;
+function getLifecycleStageIndex(issue: Issue, latestRunStatus?: string): number {
+  if (issue.status === 'merged' || latestRunStatus === 'merged') return 6;
+  if (issue.status === 'pr_opened' || latestRunStatus === 'pr_opened') return 4;
+  if (issue.status === 'in_progress' || latestRunStatus === 'running') return 3;
+  if (issue.status === 'approved' || latestRunStatus === 'queued') return 2;
+  if (issue.status === 'escalated') return -1;
+  if (issue.triage_summary || issue.status === 'candidate') return 1;
   return 0;
+}
+
+/** Determine if the issue is a good candidate for triage based on heuristics */
+function getTriageRecommendation(issue: Issue): { recommended: boolean; reason: string } | null {
+  if (issue.triage_summary) return null;
+
+  if (issue.recommended_action === 'devin_fix' && issue.confidence >= 0.5) {
+    return {
+      recommended: true,
+      reason: `High-confidence bug (${Math.round(issue.confidence * 100)}%) — recommended for Devin triage`,
+    };
+  }
+
+  if (
+    issue.recommended_action === 'devin_fix' &&
+    (issue.complexity === 'small' || issue.complexity === 'medium')
+  ) {
+    return {
+      recommended: true,
+      reason: `${issue.complexity.charAt(0).toUpperCase() + issue.complexity.slice(1)} complexity bug — good candidate for Devin analysis`,
+    };
+  }
+
+  if (issue.recommended_action === 'devin_investigate' && issue.confidence >= 0.4) {
+    return {
+      recommended: true,
+      reason: 'Needs scoping — Devin can analyze feasibility and suggest an approach',
+    };
+  }
+
+  if (issue.days_stale > 90 && issue.recommended_action !== 'close') {
+    return {
+      recommended: true,
+      reason: `Stale for ${issue.days_stale} days — triage to assess current relevance`,
+    };
+  }
+
+  return null;
 }
 
 const effortLabels: Record<string, string> = {
@@ -158,8 +206,9 @@ function getDevinRationale(issue: Issue): { title: string; points: string[] } | 
   return null;
 }
 
-export function IssueDetailPanel({ issue, runs, activityEntries, onClose, onHandOffToDevin, handingOff, handOffError }: IssueDetailPanelProps) {
+export function IssueDetailPanel({ issue, runs, activityEntries, onClose, onHandOffToDevin, onTriageIssue, handingOff, handOffError, triageStatus }: IssueDetailPanelProps) {
   const issueRuns = runs.filter((r) => {
+    if (r.issue == null) return false;
     const runIssueId = typeof r.issue === 'object' ? r.issue.id : r.issue;
     return runIssueId === issue.id;
   });
@@ -186,11 +235,18 @@ export function IssueDetailPanel({ issue, runs, activityEntries, onClose, onHand
     .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
   // Lifecycle stepper
-  const currentStageIndex = getLifecycleStageIndex(issue.status, latestRun?.status);
+  const currentStageIndex = getLifecycleStageIndex(issue, latestRun?.status);
   const isEscalated = issue.status === 'escalated';
 
   // Devin rationale
   const rationale = getDevinRationale(issue);
+
+  // Triage recommendation based on heuristics
+  const triageRec = getTriageRecommendation(issue);
+  const isTriaging = triageStatus?.status === 'pending' || triageStatus?.status === 'polling';
+  const triageCompleted = triageStatus?.status === 'completed';
+  const triageFailed = triageStatus?.status === 'failed';
+  const hasTriage = Boolean(issue.triage_summary);
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -271,6 +327,105 @@ export function IssueDetailPanel({ issue, runs, activityEntries, onClose, onHand
             </div>
           )}
         </div>
+
+        {/* Triage Recommendation Banner */}
+        {!hasTriage && !isTriaging && !triageCompleted && !triageFailed && triageRec && (
+          <div className="rounded-lg border border-indigo-200 bg-indigo-50/50 p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-100 flex-shrink-0">
+                <Search className="h-4 w-4 text-indigo-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-indigo-900 mb-1">
+                  Recommended for Triage
+                </p>
+                <p className="text-xs text-indigo-700 leading-relaxed">
+                  {triageRec.reason}
+                </p>
+                <button
+                  onClick={() => onTriageIssue(issue)}
+                  className="mt-3 inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-indigo-700"
+                >
+                  <Bot className="h-3.5 w-3.5" />
+                  Analyze with Devin
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Triage In Progress Banner */}
+        {isTriaging && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 flex-shrink-0">
+                <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-blue-900 mb-1">
+                  Devin is analyzing this issue...
+                </p>
+                <p className="text-xs text-blue-700 leading-relaxed">
+                  Devin is reviewing the codebase to identify relevant files, suggest a fix approach, and assess risks. This typically takes 5-10 minutes.
+                </p>
+                {triageStatus?.sessionUrl && (
+                  <a
+                    href={triageStatus.sessionUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 underline underline-offset-2"
+                  >
+                    <ExternalLink className="h-3 w-3" /> Watch triage session
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Triage Completed Banner */}
+        {triageCompleted && (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 flex-shrink-0">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-emerald-900">
+                  Triage analysis complete
+                </p>
+                <p className="text-xs text-emerald-700">
+                  Refresh the dashboard to see the results below.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Triage Failed Banner */}
+        {triageFailed && (
+          <div className="rounded-lg border border-rose-200 bg-rose-50/50 p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-100 flex-shrink-0">
+                <AlertTriangle className="h-4 w-4 text-rose-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-rose-900 mb-1">
+                  Triage analysis failed
+                </p>
+                <p className="text-xs text-rose-700 leading-relaxed">
+                  {triageStatus?.error || 'An unexpected error occurred'}
+                </p>
+                <button
+                  onClick={() => onTriageIssue(issue)}
+                  className="mt-2 inline-flex items-center gap-1.5 text-xs text-rose-600 hover:text-rose-800 underline underline-offset-2"
+                >
+                  Retry analysis
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Devin Rationale */}
         {rationale && (
@@ -512,7 +667,17 @@ export function IssueDetailPanel({ issue, runs, activityEntries, onClose, onHand
 
       {/* Action buttons footer */}
       <div className="border-t border-slate-100 px-5 py-3 space-y-2">
-        {/* Hand off to Devin button */}
+        {/* Step 1: Analyze with Devin — for untriaged issues without a Devin run */}
+        {!hasTriage && !hasDevinRun && !isTriaging && !triageCompleted && (
+          <button
+            onClick={() => onTriageIssue(issue)}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm font-medium text-indigo-700 transition-colors hover:bg-indigo-100 hover:border-indigo-300"
+          >
+            <Search className="h-4 w-4" /> Analyze with Devin
+          </button>
+        )}
+
+        {/* Step 2: Hand off to Devin — shown when triage is done OR user wants to skip triage */}
         {!hasDevinRun && (issue.status === 'unreviewed' || issue.status === 'candidate' || issue.status === 'approved') && (
           <>
             <button
@@ -523,9 +688,14 @@ export function IssueDetailPanel({ issue, runs, activityEntries, onClose, onHand
               {handingOff ? (
                 <><Loader2 className="h-4 w-4 animate-spin" /> Creating Devin session...</>
               ) : (
-                <><Bot className="h-4 w-4" /> Hand off to Devin</>
+                <><Bot className="h-4 w-4" /> {hasTriage ? 'Hand off to Devin — Fix this issue' : 'Hand off to Devin'}</>
               )}
             </button>
+            {hasTriage && (
+              <p className="text-xs text-center text-slate-400">
+                Devin will use the triage analysis above as context for the fix
+              </p>
+            )}
             {handOffError && (
               <p className="text-xs text-rose-600 text-center">{handOffError}</p>
             )}

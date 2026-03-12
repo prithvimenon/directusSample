@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ActivityLogEntry, DevinRun, Issue } from '../types';
 
-const API_URL = import.meta.env.VITE_DIRECTUS_URL || 'http://localhost:8055';
+// When VITE_DIRECTUS_URL is empty, use relative URLs (proxied by Vite dev server).
+// Set to 'http://localhost:8055' for direct access without proxy.
+const API_URL = import.meta.env.VITE_DIRECTUS_URL ?? '';
 
 async function fetchJSON<T>(url: string): Promise<T> {
   const res = await fetch(url);
