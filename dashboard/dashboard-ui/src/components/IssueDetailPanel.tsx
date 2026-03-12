@@ -99,8 +99,8 @@ function getLifecycleStageIndex(issue: Issue, latestRunStatus?: string): number 
   if (issue.status === 'pr_opened' || latestRunStatus === 'pr_opened') return 4;
   if (issue.status === 'in_progress' || latestRunStatus === 'running') return 3;
   if (issue.status === 'approved' || latestRunStatus === 'queued') return 2;
-  if (issue.triage_summary || issue.status === 'candidate') return 1;
   if (issue.status === 'escalated') return -1;
+  if (issue.triage_summary || issue.status === 'candidate') return 1;
   return 0;
 }
 
