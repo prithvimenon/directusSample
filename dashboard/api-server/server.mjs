@@ -516,8 +516,11 @@ app.get('/api/triage/status/:sessionId', async (req, res) => {
     const sessionData = await devinRes.json();
     const statusEnum = sessionData.status_enum || sessionData.status;
 
-    // Session still running
-    if (statusEnum === 'running' || statusEnum === 'blocked') {
+    // Only treat known terminal statuses as completed.
+    // Freshly created sessions may have status 'created', 'started', etc.
+    const terminalStatuses = ['finished', 'stopped', 'failed', 'error', 'completed'];
+
+    if (!terminalStatuses.includes(statusEnum)) {
       return res.json({
         status: statusEnum,
         completed: false,
@@ -525,7 +528,7 @@ app.get('/api/triage/status/:sessionId', async (req, res) => {
       });
     }
 
-    // Session finished (completed, stopped, etc.)
+    // Session finished
     const output = sessionData.structured_output;
 
     if (!output || !issueId) {

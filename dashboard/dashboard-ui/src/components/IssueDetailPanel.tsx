@@ -329,7 +329,7 @@ export function IssueDetailPanel({ issue, runs, activityEntries, onClose, onHand
         </div>
 
         {/* Triage Recommendation Banner */}
-        {!hasTriage && !isTriaging && !triageCompleted && triageRec && (
+        {!hasTriage && !isTriaging && !triageCompleted && !triageFailed && triageRec && (
           <div className="rounded-lg border border-indigo-200 bg-indigo-50/50 p-4">
             <div className="flex items-start gap-3">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-100 flex-shrink-0">
