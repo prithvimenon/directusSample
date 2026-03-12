@@ -608,6 +608,105 @@ app.get('/api/triage/status/:sessionId', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/triage/reconcile
+ * Finds issues that have a triage_session_id but no triage_summary (results not stored),
+ * checks each session's status, and stores results for any that have completed.
+ * Called on dashboard load to recover from lost browser polling.
+ */
+app.post('/api/triage/reconcile', async (req, res) => {
+  try {
+    // 1. Authenticate with Directus
+    const tokenRes = await fetch(`${DIRECTUS_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: process.env.DIRECTUS_ADMIN_EMAIL || 'admin@example.com',
+        password: process.env.DIRECTUS_ADMIN_PASSWORD || 'admin123',
+      }),
+    });
+
+    if (!tokenRes.ok) {
+      return res.status(500).json({ error: 'Failed to authenticate with Directus' });
+    }
+
+    const tokenData = await tokenRes.json();
+    const directusToken = tokenData.data.access_token;
+
+    // 2. Find issues with triage_session_id but no triage_summary
+    const issuesRes = await fetch(
+      `${DIRECTUS_URL}/items/issues?filter[triage_session_id][_nnull]=true&filter[triage_summary][_null]=true&fields=id,triage_session_id&limit=-1`,
+      { headers: { Authorization: `Bearer ${directusToken}` } },
+    );
+
+    if (!issuesRes.ok) {
+      return res.status(500).json({ error: 'Failed to fetch issues from Directus' });
+    }
+
+    const issuesData = await issuesRes.json();
+    const pendingIssues = issuesData.data || [];
+
+    if (pendingIssues.length === 0) {
+      return res.json({ message: 'No pending triage results to reconcile', reconciled: 0 });
+    }
+
+    console.log(`Reconcile: checking ${pendingIssues.length} pending triage session(s)...`);
+
+    // 3. Check each session and store results if available
+    let reconciled = 0;
+
+    for (const issue of pendingIssues) {
+      try {
+        const devinRes = await fetch(`${DEVIN_API_URL}/sessions/${issue.triage_session_id}`, {
+          headers: { Authorization: `Bearer ${DEVIN_API_KEY}` },
+        });
+
+        if (!devinRes.ok) continue;
+
+        const sessionData = await devinRes.json();
+        const output = sessionData.structured_output;
+
+        if (!output) continue;
+
+        const triageData = typeof output === 'string' ? JSON.parse(output) : output;
+
+        const patch = {
+          triage_summary: triageData.triage_summary || null,
+          relevant_files: triageData.relevant_files || [],
+          suggested_approach: triageData.suggested_approach || null,
+          risk_areas: triageData.risk_areas || [],
+          estimated_effort: triageData.estimated_effort || null,
+          complexity: triageData.complexity || null,
+          confidence: triageData.confidence != null ? triageData.confidence : null,
+          recommended_action: triageData.recommended_action || null,
+          triaged_at: new Date().toISOString(),
+        };
+
+        const patchRes = await fetch(`${DIRECTUS_URL}/items/issues/${issue.id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${directusToken}`,
+          },
+          body: JSON.stringify(patch),
+        });
+
+        if (patchRes.ok) {
+          reconciled++;
+          console.log(`  Reconciled triage for issue ${issue.id} from session ${issue.triage_session_id}`);
+        }
+      } catch (issueErr) {
+        console.warn(`  Error reconciling issue ${issue.id}:`, issueErr.message);
+      }
+    }
+
+    return res.json({ message: `Reconciled ${reconciled} of ${pendingIssues.length} pending triage(s)`, reconciled });
+  } catch (err) {
+    console.error('Error in reconcile endpoint:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`API server running on http://localhost:${PORT}`);
   console.log(`Devin API key: ${DEVIN_API_KEY.slice(0, 8)}...`);

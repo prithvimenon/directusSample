@@ -1,5 +1,5 @@
 import { Bot, RefreshCw } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityLog } from './components/ActivityLog';
 import { IssueDetailPanel } from './components/IssueDetailPanel';
 import { IssuesTable } from './components/IssuesTable';
@@ -17,6 +17,29 @@ function App() {
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
+  const API_BASE = import.meta.env.VITE_API_URL || '';
+
+  // On mount, reconcile any triage sessions whose results were never stored
+  // (e.g. browser polling stopped due to page refresh)
+  const reconcileTriage = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/triage/reconcile`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.reconciled > 0) {
+          console.log(`Reconciled ${data.reconciled} triage result(s)`);
+          await refreshIssues();
+        }
+      }
+    } catch {
+      // Non-blocking — best-effort reconciliation
+    }
+  }, [API_BASE, refreshIssues]);
+
+  useEffect(() => {
+    reconcileTriage();
+  }, [reconcileTriage]);
+
   // Clear hand-off error and triage state when switching issues so stale state doesn't leak
   useEffect(() => {
     clearError();
@@ -24,7 +47,7 @@ function App() {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([refreshIssues(), refreshRuns(), refreshActivity()]);
+    await Promise.all([refreshIssues(), refreshRuns(), refreshActivity(), reconcileTriage()]);
     setRefreshing(false);
   };
 
