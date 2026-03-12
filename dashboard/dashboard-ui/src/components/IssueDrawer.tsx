@@ -41,6 +41,7 @@ export function IssueDrawer({ issue, runs, onClose }: IssueDrawerProps) {
   if (!issue) return null;
 
   const issueRuns = runs.filter((r) => {
+    if (r.issue == null) return false;
     const runIssueId = typeof r.issue === 'object' ? r.issue.id : r.issue;
     return runIssueId === issue.id;
   });
