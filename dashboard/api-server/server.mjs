@@ -453,7 +453,7 @@ app.post('/api/triage/store-result', async (req, res) => {
     const tokenData = await tokenRes.json();
     const directusToken = tokenData.data.access_token;
 
-    // 3. Update the issue
+    // 3. Update the issue (advance status from unreviewed → candidate)
     const patch = {
       triage_summary: triageData.triage_summary || null,
       relevant_files: triageData.relevant_files || [],
@@ -465,6 +465,7 @@ app.post('/api/triage/store-result', async (req, res) => {
       recommended_action: triageData.recommended_action || null,
       triage_session_id: sessionId,
       triaged_at: new Date().toISOString(),
+      status: 'candidate',
     };
 
     const patchRes = await fetch(`${DIRECTUS_URL}/items/issues/${issueId}`, {
@@ -574,6 +575,7 @@ app.get('/api/triage/status/:sessionId', async (req, res) => {
       recommended_action: triageData.recommended_action || null,
       triage_session_id: sessionId,
       triaged_at: new Date().toISOString(),
+      status: 'candidate',
     };
 
     const patchRes = await fetch(`${DIRECTUS_URL}/items/issues/${issueId}`, {
@@ -680,6 +682,7 @@ app.post('/api/triage/reconcile', async (req, res) => {
           confidence: triageData.confidence != null ? triageData.confidence : null,
           recommended_action: triageData.recommended_action || null,
           triaged_at: new Date().toISOString(),
+          status: 'candidate',
         };
 
         const patchRes = await fetch(`${DIRECTUS_URL}/items/issues/${issue.id}`, {
