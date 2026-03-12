@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Issue } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -42,6 +42,13 @@ export function useDevinApi() {
   const [state, setState] = useState<DevinApiState>({ loading: false, error: null });
   const [triageState, setTriageState] = useState<TriageState>({});
   const pollingRefs = useRef<Record<number, ReturnType<typeof setInterval>>>({});
+
+  // Clean up all polling intervals on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(pollingRefs.current).forEach(clearInterval);
+    };
+  }, []);
 
   const createSession = async (issue: Issue): Promise<CreateSessionResponse | null> => {
     setState({ loading: true, error: null });

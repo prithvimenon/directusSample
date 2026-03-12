@@ -566,14 +566,12 @@ app.get('/api/triage/status/:sessionId', async (req, res) => {
       suggested_approach: triageData.suggested_approach || null,
       risk_areas: triageData.risk_areas || [],
       estimated_effort: triageData.estimated_effort || null,
+      complexity: triageData.complexity || null,
+      confidence: triageData.confidence != null ? triageData.confidence : null,
+      recommended_action: triageData.recommended_action || null,
       triage_session_id: sessionId,
       triaged_at: new Date().toISOString(),
     };
-
-    // Also update complexity/confidence/recommended_action if provided by triage
-    if (triageData.complexity) patch.complexity = triageData.complexity;
-    if (triageData.confidence != null) patch.confidence = triageData.confidence;
-    if (triageData.recommended_action) patch.recommended_action = triageData.recommended_action;
 
     const patchRes = await fetch(`${DIRECTUS_URL}/items/issues/${issueId}`, {
       method: 'PATCH',
