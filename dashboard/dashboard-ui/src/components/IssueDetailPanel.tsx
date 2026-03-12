@@ -160,6 +160,7 @@ function getDevinRationale(issue: Issue): { title: string; points: string[] } | 
 
 export function IssueDetailPanel({ issue, runs, activityEntries, onClose, onHandOffToDevin, handingOff, handOffError }: IssueDetailPanelProps) {
   const issueRuns = runs.filter((r) => {
+    if (r.issue == null) return false;
     const runIssueId = typeof r.issue === 'object' ? r.issue.id : r.issue;
     return runIssueId === issue.id;
   });
