@@ -517,7 +517,10 @@ class OASSpecsService implements SpecificationSubService {
 				const relatedCollection = schema.collections[relation.collection]!;
 				const relatedPrimaryKeyField = relatedCollection.fields[relatedCollection.primary]!;
 
-				if (!relatedTag || !relatedPrimaryKeyField) return propertyObject;
+				if (!relatedTag || !relatedPrimaryKeyField) {
+					propertyObject.nullable = field.nullable;
+					return propertyObject;
+				}
 
 				propertyObject.type = 'array';
 				propertyObject.nullable = field.nullable;
@@ -548,6 +551,8 @@ class OASSpecsService implements SpecificationSubService {
 						})) as any),
 					],
 				};
+			} else {
+				propertyObject.nullable = field.nullable;
 			}
 		}
 
