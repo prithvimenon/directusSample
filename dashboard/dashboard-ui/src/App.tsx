@@ -32,9 +32,11 @@ function App() {
     const confirmed = window.confirm(
       `Hand off issue #${issue.github_id.toString().slice(-5)} "${issue.title}" to Devin?\n\nDevin will analyze and attempt to fix this issue autonomously.`
     );
+
     if (!confirmed) return;
 
     const result = await createSession(issue);
+
     if (result) {
       // Refresh all data to show the new Devin run and activity
       await Promise.all([refreshIssues(), refreshRuns(), refreshActivity()]);

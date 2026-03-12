@@ -42,6 +42,14 @@ export interface Issue {
   status: IssueStatus;
   approved_by: string | null;
   approved_at: string | null;
+  // Triage fields — populated by Devin triage agent at ingest time
+  triage_summary: string | null;
+  relevant_files: string[] | null;
+  suggested_approach: string | null;
+  risk_areas: string[] | null;
+  estimated_effort: 'quick_fix' | 'moderate' | 'significant' | 'major' | null;
+  triage_session_id: string | null;
+  triaged_at: string | null;
 }
 
 export interface DevinRun {

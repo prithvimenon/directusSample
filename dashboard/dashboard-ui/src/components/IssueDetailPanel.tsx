@@ -7,13 +7,16 @@ import {
   Circle,
   Clock,
   ExternalLink,
+  FileCode,
   GitMerge,
   GitPullRequest,
   Lightbulb,
   Loader2,
   Play,
+  ShieldAlert,
   Tag,
   X,
+  Zap,
 } from 'lucide-react';
 import type { ActivityLogEntry, DevinRun, Issue } from '../types';
 import { StatusBadge } from './StatusBadge';
@@ -91,39 +94,67 @@ function getLifecycleStageIndex(issueStatus: string, latestRunStatus?: string): 
   return 0;
 }
 
+const effortLabels: Record<string, string> = {
+  quick_fix: 'Quick Fix (<1hr)',
+  moderate: 'Moderate (1-4hrs)',
+  significant: 'Significant (4-8hrs)',
+  major: 'Major (>8hrs)',
+};
+
 function getDevinRationale(issue: Issue): { title: string; points: string[] } | null {
+  // If AI triage data is available, use it for the rationale
+  if (issue.triage_summary) {
+    const points: string[] = [];
+    points.push(issue.triage_summary);
+    return {
+      title: issue.recommended_action === 'devin_fix' ? 'Good Devin Candidate' : 'Triage Summary',
+      points,
+    };
+  }
+
   if (issue.recommended_action === 'devin_fix') {
     const points: string[] = [];
+
     if (issue.confidence >= 0.5) {
       points.push(`${Math.round(issue.confidence * 100)}% confidence score indicates a well-defined, solvable problem`);
     }
+
     if (issue.complexity === 'small' || issue.complexity === 'trivial') {
       points.push(`${issue.complexity.charAt(0).toUpperCase() + issue.complexity.slice(1)} complexity \u2014 contained scope with minimal cross-module impact`);
     } else if (issue.complexity === 'medium') {
       points.push('Medium complexity \u2014 manageable scope that Devin can handle autonomously');
     }
+
     if (issue.days_stale > 14) {
       points.push(`Open for ${issue.days_stale} days \u2014 a quick autonomous fix prevents further backlog aging`);
     }
+
     if (issue.labels && issue.labels.some((l) => l.toLowerCase().includes('bug'))) {
       points.push('Bug report with clear reproduction steps \u2014 ideal for autonomous resolution');
     }
+
     if (points.length === 0) {
       points.push('Heuristics indicate this issue is well-suited for autonomous resolution');
     }
+
     return { title: 'Good Devin Candidate', points };
   }
+
   if (issue.recommended_action === 'devin_investigate') {
     const points: string[] = [];
     points.push('Issue needs further scoping before implementation can begin');
+
     if (issue.confidence < 0.4) {
       points.push(`Low confidence (${Math.round(issue.confidence * 100)}%) \u2014 unclear requirements or multiple possible approaches`);
     }
+
     if (issue.complexity === 'large') {
       points.push('Large complexity \u2014 may involve architectural decisions or cross-cutting concerns');
     }
+
     return { title: 'Needs Scoping', points };
   }
+
   return null;
 }
 
@@ -384,6 +415,87 @@ export function IssueDetailPanel({ issue, runs, activityEntries, onClose, onHand
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* AI Triage Analysis — shown when triage data is available */}
+        {issue.triage_summary && (
+          <div className="space-y-3">
+            <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
+              AI Triage Analysis
+            </p>
+
+            {/* Suggested Approach */}
+            {issue.suggested_approach && (
+              <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Zap className="h-3.5 w-3.5 text-amber-500" />
+                  <p className="text-xs font-semibold text-slate-700">Suggested Approach</p>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-wrap">
+                  {issue.suggested_approach}
+                </p>
+              </div>
+            )}
+
+            {/* Relevant Files */}
+            {issue.relevant_files && issue.relevant_files.length > 0 && (
+              <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <FileCode className="h-3.5 w-3.5 text-blue-500" />
+                  <p className="text-xs font-semibold text-slate-700">Key Files</p>
+                </div>
+                <div className="space-y-1">
+                  {issue.relevant_files.map((file) => (
+                    <p key={file} className="text-xs text-slate-600 font-mono">
+                      {file}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Risk Areas */}
+            {issue.risk_areas && issue.risk_areas.length > 0 && (
+              <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <ShieldAlert className="h-3.5 w-3.5 text-rose-400" />
+                  <p className="text-xs font-semibold text-slate-700">Risk Areas</p>
+                </div>
+                <ul className="space-y-1">
+                  {issue.risk_areas.map((risk, i) => (
+                    <li key={i} className="flex items-start gap-2 text-xs text-slate-600">
+                      <span className="mt-1 h-1 w-1 rounded-full bg-rose-300 flex-shrink-0" />
+                      {risk}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Estimated Effort */}
+            {issue.estimated_effort && (
+              <div className="rounded-lg border border-slate-100 p-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-400">Estimated Effort</span>
+                  <span className="text-xs font-semibold text-slate-700">
+                    {effortLabels[issue.estimated_effort] || issue.estimated_effort}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Triage Session link */}
+            {issue.triage_session_id && (
+              <a
+                href={`https://app.devin.ai/sessions/${issue.triage_session_id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 underline underline-offset-2"
+              >
+                <Bot className="h-3 w-3" /> View triage session
+              </a>
+            )}
           </div>
         )}
 

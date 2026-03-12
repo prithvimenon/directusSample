@@ -6,7 +6,8 @@
   "scripts": {
     "bootstrap": "node scripts/bootstrap-schema.mjs",
     "seed": "node scripts/seed.mjs",
-    "setup": "npm run bootstrap && npm run seed"
+    "setup": "npm run bootstrap && npm run seed",
+    "analyze": "node scripts/analyze-issues.mjs"
   },
   "dependencies": {
     "@directus/sdk": "^18.0.0"

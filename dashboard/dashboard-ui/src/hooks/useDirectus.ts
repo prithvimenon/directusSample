@@ -41,10 +41,12 @@ export function useDevinRuns() {
 
   const refresh = useCallback(async () => {
     setLoading(true);
+
     try {
       const data = await fetchJSON<DevinRun[]>(
         `${API_URL}/items/devin_runs?fields=*,issue.id,issue.title&sort=-started_at`
       );
+
       setRuns(data);
     } catch {
       // silently fail
@@ -64,10 +66,12 @@ export function useActivityLog() {
 
   const refresh = useCallback(async () => {
     setLoading(true);
+
     try {
       const data = await fetchJSON<ActivityLogEntry[]>(
         `${API_URL}/items/activity_log?sort=-timestamp&limit=50`
       );
+
       setEntries(data);
     } catch {
       // silently fail
