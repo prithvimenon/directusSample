@@ -461,8 +461,6 @@ class OASSpecsService implements SpecificationSubService {
 	): SchemaObject {
 		let propertyObject: SchemaObject = {};
 
-		propertyObject.nullable = field.nullable;
-
 		if (field.note) {
 			propertyObject.description = field.note;
 		}
@@ -474,6 +472,8 @@ class OASSpecsService implements SpecificationSubService {
 				...propertyObject,
 				...this.fieldTypes[field.type],
 			};
+
+			propertyObject.nullable = field.nullable;
 		} else {
 			const relationType = getRelationType({
 				relation,
@@ -490,6 +490,7 @@ class OASSpecsService implements SpecificationSubService {
 					!relation.related_collection ||
 					relation.related_collection in schema.collections === false
 				) {
+					propertyObject.nullable = field.nullable;
 					return propertyObject;
 				}
 
@@ -499,6 +500,7 @@ class OASSpecsService implements SpecificationSubService {
 				propertyObject.oneOf = [
 					{
 						...this.fieldTypes[relatedPrimaryKeyField.type],
+						nullable: field.nullable,
 					},
 					{
 						$ref: `#/components/schemas/${relatedTag.name}`,
@@ -508,15 +510,20 @@ class OASSpecsService implements SpecificationSubService {
 				const relatedTag = tags.find((tag) => tag['x-collection'] === relation.collection);
 
 				if (!relatedTag || !relation.related_collection || relation.collection in schema.collections === false) {
+					propertyObject.nullable = field.nullable;
 					return propertyObject;
 				}
 
 				const relatedCollection = schema.collections[relation.collection]!;
 				const relatedPrimaryKeyField = relatedCollection.fields[relatedCollection.primary]!;
 
-				if (!relatedTag || !relatedPrimaryKeyField) return propertyObject;
+				if (!relatedTag || !relatedPrimaryKeyField) {
+					propertyObject.nullable = field.nullable;
+					return propertyObject;
+				}
 
 				propertyObject.type = 'array';
+				propertyObject.nullable = field.nullable;
 
 				propertyObject.items = {
 					oneOf: [
@@ -532,6 +539,7 @@ class OASSpecsService implements SpecificationSubService {
 				const relatedTags = tags.filter((tag) => relation.meta!.one_allowed_collections!.includes(tag['x-collection']));
 
 				propertyObject.type = 'array';
+				propertyObject.nullable = field.nullable;
 
 				propertyObject.items = {
 					oneOf: [
@@ -543,6 +551,8 @@ class OASSpecsService implements SpecificationSubService {
 						})) as any),
 					],
 				};
+			} else {
+				propertyObject.nullable = field.nullable;
 			}
 		}
 

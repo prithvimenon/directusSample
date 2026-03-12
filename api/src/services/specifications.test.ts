@@ -42,6 +42,21 @@ describe('Integration Tests', () => {
 		})
 		.build();
 
+	const schemaWithM2O = new SchemaBuilder()
+		.collection('posts', (c) => {
+			c.field('id').integer().primary().options({
+				nullable: false,
+			});
+
+			c.field('author').m2o('authors');
+		})
+		.collection('authors', (c) => {
+			c.field('id').integer().primary().options({
+				nullable: false,
+			});
+		})
+		.build();
+
 	describe('Services / Specifications', () => {
 		describe('oas', () => {
 			describe('generate', () => {
@@ -253,6 +268,34 @@ describe('Integration Tests', () => {
 							  },
 							}
 						`);
+					});
+				});
+
+				describe('nullable relation field', () => {
+					it('places nullable on the primitive type leg inside oneOf for m2o relations, not at the parent', async () => {
+						const service = new SpecificationService({
+							knex: db,
+							schema: schemaWithM2O,
+							accountability: { role: 'admin', admin: true } as Accountability,
+						});
+
+						const spec = await service.oas.generate();
+						const postsSchema = spec.components?.schemas?.['ItemsPosts'] as Record<string, any>;
+						const authorField = postsSchema?.properties?.author;
+
+						// nullable should NOT be at the parent level when oneOf is present
+						expect(authorField).not.toHaveProperty('nullable');
+						expect(authorField).toHaveProperty('oneOf');
+
+						// nullable should be on the primitive type leg inside oneOf
+						const primitiveTypeLeg = authorField.oneOf[0];
+						expect(primitiveTypeLeg).toHaveProperty('type');
+						expect(primitiveTypeLeg).toHaveProperty('nullable', true);
+
+						// $ref leg should not have nullable
+						const refLeg = authorField.oneOf[1];
+						expect(refLeg).toHaveProperty('$ref');
+						expect(refLeg).not.toHaveProperty('nullable');
 					});
 				});
 
