@@ -332,8 +332,8 @@ function emitValue() {
 		margin-inline-end: var(--icon-filter-margin-right);
 	}
 
-	&:focus-within,
-	&:not(.disabled):hover {
+	&:not(.active):focus-within,
+	&:not(.active):not(.disabled):hover {
 		border-color: var(--theme--form--field--input--border-color-hover);
 	}
 
