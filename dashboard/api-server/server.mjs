@@ -489,6 +489,124 @@ app.post('/api/triage/store-result', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/triage/status/:sessionId
+ * Polls the Devin API for triage session status. If completed with structured output,
+ * automatically stores the results in Directus and returns { completed: true, stored: true }.
+ * Query param: issueId (required for auto-store)
+ */
+app.get('/api/triage/status/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const issueId = req.query.issueId ? Number(req.query.issueId) : null;
+
+    // 1. Fetch session status from Devin API
+    const devinRes = await fetch(`${DEVIN_API_URL}/sessions/${sessionId}`, {
+      headers: { Authorization: `Bearer ${DEVIN_API_KEY}` },
+    });
+
+    if (!devinRes.ok) {
+      return res.status(devinRes.status).json({
+        error: 'Failed to fetch session from Devin API',
+        completed: false,
+        stored: false,
+      });
+    }
+
+    const sessionData = await devinRes.json();
+    const statusEnum = sessionData.status_enum || sessionData.status;
+
+    // Session still running
+    if (statusEnum === 'running' || statusEnum === 'blocked') {
+      return res.json({
+        status: statusEnum,
+        completed: false,
+        stored: false,
+      });
+    }
+
+    // Session finished (completed, stopped, etc.)
+    const output = sessionData.structured_output;
+
+    if (!output || !issueId) {
+      return res.json({
+        status: statusEnum,
+        completed: true,
+        stored: false,
+      });
+    }
+
+    // 2. Auto-store results in Directus
+    const triageData = typeof output === 'string' ? JSON.parse(output) : output;
+
+    const tokenRes = await fetch(`${DIRECTUS_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: process.env.DIRECTUS_ADMIN_EMAIL || 'admin@example.com',
+        password: process.env.DIRECTUS_ADMIN_PASSWORD || 'admin123',
+      }),
+    });
+
+    if (!tokenRes.ok) {
+      return res.json({
+        status: statusEnum,
+        completed: true,
+        stored: false,
+        error: 'Failed to authenticate with Directus',
+      });
+    }
+
+    const tokenData = await tokenRes.json();
+    const directusToken = tokenData.data.access_token;
+
+    const patch = {
+      triage_summary: triageData.triage_summary || null,
+      relevant_files: triageData.relevant_files || [],
+      suggested_approach: triageData.suggested_approach || null,
+      risk_areas: triageData.risk_areas || [],
+      estimated_effort: triageData.estimated_effort || null,
+      triage_session_id: sessionId,
+      triaged_at: new Date().toISOString(),
+    };
+
+    // Also update complexity/confidence/recommended_action if provided by triage
+    if (triageData.complexity) patch.complexity = triageData.complexity;
+    if (triageData.confidence != null) patch.confidence = triageData.confidence;
+    if (triageData.recommended_action) patch.recommended_action = triageData.recommended_action;
+
+    const patchRes = await fetch(`${DIRECTUS_URL}/items/issues/${issueId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${directusToken}`,
+      },
+      body: JSON.stringify(patch),
+    });
+
+    if (!patchRes.ok) {
+      console.error(`Failed to store triage result for issue ${issueId}:`, await patchRes.text());
+      return res.json({
+        status: statusEnum,
+        completed: true,
+        stored: false,
+        error: 'Failed to update issue in Directus',
+      });
+    }
+
+    console.log(`Triage results stored for issue ${issueId} from session ${sessionId}`);
+
+    return res.json({
+      status: statusEnum,
+      completed: true,
+      stored: true,
+    });
+  } catch (err) {
+    console.error('Error polling triage status:', err);
+    return res.status(500).json({ error: 'Internal server error', completed: false, stored: false });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`API server running on http://localhost:${PORT}`);
   console.log(`Devin API key: ${DEVIN_API_KEY.slice(0, 8)}...`);

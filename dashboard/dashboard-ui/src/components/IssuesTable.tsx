@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Filter, Search, X } from 'lucide-react';
+import { Bot, ChevronDown, ChevronUp, Filter, Search, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { Issue, IssueStatus } from '../types';
 import { StatusBadge } from './StatusBadge';
@@ -267,9 +267,19 @@ export function IssuesTable({ issues, loading, onSelectIssue, selectedIssueId }:
                   </span>
                 </td>
                 <td className="py-3 px-2">
-                  <p className="text-sm font-medium text-slate-900 leading-snug">
-                    {issue.title}
-                  </p>
+                  <div className="flex items-start gap-1.5">
+                    <p className="text-sm font-medium text-slate-900 leading-snug">
+                      {issue.title}
+                    </p>
+                    {/* Triage recommendation indicator */}
+                    {!issue.triage_summary &&
+                      ((issue.recommended_action === 'devin_fix' && issue.confidence >= 0.5) ||
+                       (issue.recommended_action === 'devin_fix' && (issue.complexity === 'small' || issue.complexity === 'medium'))) && (
+                      <span title="Recommended for Devin triage" className="mt-0.5 flex-shrink-0">
+                        <Bot className="h-3.5 w-3.5 text-indigo-400" />
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="py-3 px-2">
                   <span className={`text-sm font-medium ${getAgeColor(issue.days_stale)}`}>
