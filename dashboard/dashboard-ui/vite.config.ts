@@ -15,14 +15,30 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true,
+        // Strip tunnel basic-auth so it doesn't leak to the API server
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            proxyReq.removeHeader('authorization');
+          });
+        },
       },
       '/items': {
         target: 'http://localhost:8055',
         changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            proxyReq.removeHeader('authorization');
+          });
+        },
       },
       '/auth': {
         target: 'http://localhost:8055',
         changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            proxyReq.removeHeader('authorization');
+          });
+        },
       },
     },
   },
