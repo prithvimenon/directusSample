@@ -1,141 +1,144 @@
-# Running & Testing the Issue Autopilot Dashboard
+# Testing the Issue Autopilot Dashboard
 
-## Overview
-The dashboard is a standalone React + Vite app (`dashboard/dashboard-ui/`) backed by a Directus CMS (`dashboard/docker-compose.yml`) and an Express API server (`dashboard/api-server/`) that proxies Devin API calls.
+## Devin Secrets Needed
+- `GITHUB_API_TOKEN` — GitHub PAT for fetching issues from public repos (at least public_repo read scope)
+- `DEVIN_API_KEY` — Devin API key for creating triage/fix sessions (get from https://app.devin.ai/settings/api-keys)
 
-## Secrets Needed
-- `GITHUB_API_TOKEN` — GitHub PAT for seeding issues from `directus/directus` (public repo read access). **Required** — the seed fetches 300 issues (3-4 API pages) which exceeds the unauthenticated rate limit of 60 req/hr.
-- `DEVIN_API_KEY` — Devin API key (from https://app.devin.ai/settings/api-keys) for the "Hand off to Devin" feature. Without this, the API server won't start.
+## Quick Start (5 Steps)
 
-## Full Setup (5 steps)
-
-### 1. Start Directus + PostgreSQL
+### 1. Start Docker (Directus + PostgreSQL)
 ```bash
 cd dashboard && docker compose up -d
+# Wait ~30s for Directus to be healthy
+curl -s http://localhost:8055/server/health
 ```
-Wait ~30s for Directus to initialize:
-```bash
-for i in $(seq 1 30); do
-  curl -s -o /dev/null -w "%{http_code}" http://localhost:8055/server/health | grep -q "200" && echo "Ready" && break
-  sleep 2
-done
-```
-Admin UI: http://localhost:8055 (admin@example.com / admin123)
 
-### 2. Bootstrap schema + seed data
+### 2. Bootstrap Schema + Seed Issues
 ```bash
 cd dashboard && npm install && npm run bootstrap && GITHUB_TOKEN=$GITHUB_API_TOKEN npm run seed
 ```
-This creates 3 collections (issues, devin_runs, activity_log) and seeds 300 issues, 12 devin_runs, ~57 activity_log entries.
+- Seeds 300 real issues from directus/directus via GitHub API
+- Creates devin_runs (12 records) and activity_log (~57 entries)
+- Bootstrap is idempotent — skips existing collections
 
-### 3. Start the API server
+**Important:** If new fields were added to an existing collection (e.g. triage fields on `issues`), the bootstrap script will skip the collection entirely since it already exists. You must add the new fields manually via the Directus API:
 ```bash
-cd dashboard/api-server && npm install
-echo "DEVIN_API_KEY=$DEVIN_API_KEY" > .env
-npm start
-```
-The API server runs on http://localhost:3001. It proxies Devin API calls and writes records to Directus.
+TOKEN=$(curl -s http://localhost:8055/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"admin@example.com","password":"admin123"}' | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['access_token'])")
 
-### 4. Start the frontend dev server
-In a separate terminal:
+curl -X POST http://localhost:8055/fields/issues \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"field":"new_field_name","type":"text","schema":{"is_nullable":true}}'
+```
+
+### 3. Start API Server (port 3001)
+```bash
+cd dashboard/api-server && npm install && DEVIN_API_KEY=$DEVIN_API_KEY DIRECTUS_URL=http://localhost:8055 node server.mjs
+```
+
+### 4. Start Frontend (port 5173)
 ```bash
 cd dashboard/dashboard-ui && npm install && npm run dev
 ```
-The dashboard is served at http://localhost:5173. The Vite dev proxy forwards `/api/*` requests to the API server on port 3001.
 
-**Tip:** If the page loads blank, clear the Vite cache: `rm -rf node_modules/.vite` and restart the dev server. Check browser console for errors.
+### 5. Open Dashboard
+Open http://localhost:5173 in the browser.
 
-### 5. Open the dashboard
-Navigate to http://localhost:5173 in the browser.
+## Architecture
+- **Directus** (localhost:8055): Data store with `issues`, `devin_runs`, `activity_log` collections
+- **API Server** (localhost:3001): Express server that proxies Devin API calls (hand-off, triage)
+- **Frontend** (localhost:5173): React + Vite dashboard UI
 
-## What to Test
+## Directus Admin Credentials
+- URL: http://localhost:8055
+- Email: admin@example.com
+- Password: admin123
 
-### KPI Cards (top row)
-- 6 metric cards: Total Issues, In Progress, PRs Open, Merged, Escalated, Avg Age
-- Clean white styling with slate borders
+## Key UI Features to Test
 
-### Issues Table
-- Full issue titles visible (no truncation)
-- Sortable columns, status filter bar
-- Recommendation labels: "Good Devin Candidate" (for devin_fix) and "Needs Scoping" (for devin_investigate)
-- Clicking a row opens the detail panel on the right (~35% width)
+### Issue Table
+- 300 issues with status badges, complexity, confidence, recommendation columns
+- Search/filter functionality
+- Click issue row to open detail panel on the right (35% width)
 
-### Issue Detail Panel (right side, ~35% width)
-- **Lifecycle Stepper**: 6-stage progression (Ingested > Triaged > Approved > Devin Running > PR Opened > Merged)
-  - Completed stages: green checkmarks
-  - Current stage: indigo with ring indicator
-  - Upcoming stages: gray circles with numbers
-  - Escalated issues: red "Escalated to human owner" banner instead of stepper
-  - Merged issues: all 6 stages show green checkmarks (fully completed)
-  - Queued issues: show "Approved" stage (not "Devin Running")
-- **Devin Rationale ("Why Devin")**: Card with lightbulb icon showing contextual bullet points based on confidence score, complexity, staleness, and labels. Only shown for devin_fix and devin_investigate recommendations.
-- Shows issue metadata (age, complexity, confidence, created date), recommendation, labels, description
-- **Unassigned issues** (unreviewed/candidate/approved with no Devin runs): Shows "Hand off to Devin" button
-- **In-progress issues**: Shows "Devin Progress" timeline with activity log steps + "Open Devin Session" button
+### Issue Detail Panel
+- Lifecycle stepper: Ingested -> Triaged -> Approved -> Devin Running -> PR Opened -> Merged
+- "Why Devin" rationale section with contextual bullet points
+- Recommendation labels: "Good Devin Candidate" or "Needs Scoping"
+- "Hand off to Devin" button (creates real Devin session via API server)
+- "View on GitHub" link
 
-### Hand off to Devin (real API integration)
-1. Click an unreviewed issue
-2. Click "Hand off to Devin" button
-3. Confirm the dialog
-4. Button shows loading spinner ("Creating Devin session...")
-5. A real Devin session is created via the API
-6. New browser tab opens with the Devin session URL
-7. Dashboard refreshes showing new devin_run record and activity_log entry
-8. Issue status changes to "approved"
+### AI Triage Analysis Section
+Appears in the detail panel only when `triage_summary` is non-null for the issue. Shows:
+- **Suggested Approach** — numbered step-by-step fix plan
+- **Key Files** — monospace file paths from the repo
+- **Risk Areas** — bullet points of concerns
+- **Estimated Effort** — quick_fix (<1hr), moderate (1-4hrs), significant (4-8hrs), major (>8hrs)
+- **View triage session** link
+
+To test this, insert mock triage data via Directus API:
+```bash
+TOKEN=$(curl -s http://localhost:8055/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"admin@example.com","password":"admin123"}' | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['access_token'])")
+
+curl -X PATCH http://localhost:8055/items/issues/<ISSUE_ID> \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "triage_summary": "Summary of the issue and fix approach.",
+    "relevant_files": ["path/to/file1.ts", "path/to/file2.ts"],
+    "suggested_approach": "1. Step one\n2. Step two\n3. Step three",
+    "risk_areas": ["Risk area 1", "Risk area 2"],
+    "estimated_effort": "moderate",
+    "triage_session_id": "test-session-id",
+    "triaged_at": "2026-01-01T00:00:00.000Z"
+  }'
+```
+Then refresh the dashboard and click on that issue to see the triage section.
 
 ### Activity Feed
-- Always visible at bottom of right column (or below detail panel when an issue is selected)
-- Shows outcome-oriented messages:
-  - "Issue added to backlog" (not "Issue ingested")
-  - "Devin started implementation" (not "Devin session started")
-  - "Approved for autonomous fix" (not "Issue approved")
-  - "PR opened for review", "Merged", "Escalated to human owner"
+- Shows outcome-oriented messages ("Issue added to backlog", "Devin started implementation", etc.)
+- Recent events displayed with timestamps
 
-### Status Filters
-Use the filter bar to test each status: unreviewed, candidate, approved, in_progress, pr_opened, merged, escalated
+## Triage API Endpoints
+- `POST /api/triage/analyze-issues` — creates Devin triage sessions (body: `{"limit": N}`)
+- `POST /api/triage/store-result` — webhook to persist triage results from completed sessions
 
-## Key Technical Details
-
-### Architecture
-- **Frontend**: React + Vite + Tailwind CSS (`dashboard/dashboard-ui/`)
-- **API Server**: Express proxy (`dashboard/api-server/`) — keeps DEVIN_API_KEY server-side
-- **Backend**: Directus CMS with PostgreSQL (`dashboard/docker-compose.yml`)
-- **Vite Proxy**: Dev server forwards `/api/*` to Express on port 3001
-
-### Directus v11.16+ Specifics
-- **Policy-based permissions**: Public read permissions use `/policies` endpoint (not the old `role: null` approach)
-- **Default integer PKs**: Auto-increment integers, NOT UUIDs. Foreign keys must use `type: 'integer'`
-- **bigInteger for GitHub IDs**: GitHub IDs can exceed 32-bit range. Use `bigInteger` type.
-
-### Port Usage
-- 5432: PostgreSQL
-- 8055: Directus
-- 3001: Express API server
-- 5173: Vite dev server
-
-### CORS
-The `docker-compose.yml` includes `CORS_ENABLED=true` and `CORS_ORIGIN=true`. If CORS errors appear, verify these env vars are present.
-
-### Idempotency
-- Bootstrap: re-running skips existing collections
-- Seed: deletes existing issues then re-inserts fresh data. Devin runs and activity_log are only created if none exist — to re-seed those, delete them first via the Directus API or reset with `docker compose down -v`.
-
-### Environment Variables
-- `DIRECTUS_URL` (default: http://localhost:8055)
-- `DIRECTUS_ADMIN_EMAIL` (default: admin@example.com)
-- `DIRECTUS_ADMIN_PASSWORD` (default: admin123)
-- `DIRECTUS_SECRET` (default: change-me-to-a-secure-random-value)
-- `GITHUB_TOKEN` / `GITHUB_API_TOKEN` (for seed script — required for 300 issues)
-- `DEVIN_API_KEY` (for API server)
-- `API_PORT` (default: 3001)
-
-## Lint and Build
+To test the triage API:
 ```bash
-cd dashboard/dashboard-ui && npm run lint && npm run build
+curl -X POST http://localhost:3001/api/triage/analyze-issues \
+  -H "Content-Type: application/json" \
+  -d '{"limit": 1}'
 ```
-Also supports TypeScript checking: `npx tsc --noEmit`
+This will create a real Devin session and return its ID/URL.
 
-## Teardown
+## CLI Triage Script
 ```bash
-cd dashboard && docker compose down -v
+cd dashboard && DEVIN_API_KEY=$DEVIN_API_KEY npm run analyze -- --limit 5
+# Or for a specific issue:
+DEVIN_API_KEY=$DEVIN_API_KEY npm run analyze -- --issue-id 42
+# Force re-analyze already triaged issues:
+DEVIN_API_KEY=$DEVIN_API_KEY npm run analyze -- --force
 ```
+
+## Known Issues & Workarounds
+- **`r.issue` null crash**: The `DevinRun.issue` field can be null when Directus returns null for the relation. Both `IssueDetailPanel.tsx` and `IssueDrawer.tsx` need null guards before accessing `r.issue.id`. This was fixed in PR #18.
+- **Vite cache issues**: If styles don't render, try clearing the Vite cache: `rm -rf dashboard/dashboard-ui/node_modules/.vite && npm run dev`
+- **CORS**: Docker compose must have `CORS_ENABLED: "true"` and `CORS_ORIGIN: "http://localhost:5173"` for the frontend to fetch from Directus.
+- **Bootstrap skips existing collections**: New fields added to existing collections won't be created by bootstrap. Add them manually via the Directus fields API (see Step 2 above).
+
+## Lint
+```bash
+cd ~/repos/directusSample && pnpm lint
+```
+Pre-existing lint warnings (no-console in server/CLI scripts, no-nested-ternary in pre-existing stepper code) are expected and not regressions.
+
+## Environment Variables
+| Variable | Where | Purpose |
+|---|---|---|
+| GITHUB_TOKEN / GITHUB_API_TOKEN | seed.mjs | Fetch issues from GitHub API (optional but recommended) |
+| DEVIN_API_KEY | api-server, analyze-issues.mjs | Authenticate with Devin API |
+| DIRECTUS_URL | api-server | Directus instance URL (default: http://localhost:8055) |
+| DIRECTUS_ADMIN_EMAIL | bootstrap/seed | Admin email (default: admin@example.com) |
+| DIRECTUS_ADMIN_PASSWORD | bootstrap/seed | Admin password (default: admin123) |
